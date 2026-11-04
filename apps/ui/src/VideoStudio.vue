@@ -1,0 +1,49 @@
+<script setup lang="ts">
+import { computed, nextTick, ref, watch } from 'vue'
+import { Clapperboard, Download, X, ArrowRight, Pause } from '@lucide/vue'
+import type { VideoState, VideoPlan, VideoJob } from '@veltria/contracts'
+import { bytes, t } from './i18n'
+const props = defineProps<{ state: VideoState | null; plan: VideoPlan | null; job: VideoJob | null; prompt: string; preset: 'preview' | 'short'; connected: boolean; busy: boolean; error: string }>()
+const emit = defineEmits<{ 'update:prompt': [value: string]; 'update:preset': [value: 'preview' | 'short']; plan: []; prepare: []; pause: []; create: []; cancel: [id: string]; reconcile: [id: string]; closePlan: []; device: [] }>()
+const dialog = ref<HTMLDialogElement | null>(null), consent = ref(false), license = ref(false), mediaError = ref(false)
+const preparing = computed(() => props.state?.preparation.status === 'checking')
+const active = computed(() => !!props.job && ['queued', 'submitting', 'running', 'saving'].includes(props.job.status))
+const file = computed(() => props.job?.artifactId ? `/api/v1/video/artifacts/${props.job.artifactId}` : null)
+const label = computed(() => preparing.value ? t('Comprobando el video…') : active.value ? t('Creación de video en curso') : props.state?.canCreate ? t('Crear video') : t('Revisar modelo de video'))
+const disabled = computed(() => !props.connected || props.busy || !props.state || preparing.value || active.value || props.state.canCreate && !props.prompt.trim())
+function action() { if (props.state?.canCreate) emit('create'); else emit('plan') }
+watch(() => props.job?.id, () => { mediaError.value = false })
+watch(() => props.plan, async plan => { if (plan) { consent.value = false; license.value = false; await nextTick(); if (!dialog.value?.open) dialog.value?.showModal() } else dialog.value?.close() })
+</script>
+<template>
+  <div class="page-heading"><div><h1 tabindex="-1">{{ t('Dale movimiento a tu idea.') }}</h1><p>{{ t('Describe la escena y el sonido. Veltria usará tu modelo de video existente.') }}</p></div><span class="private-badge">MiniMax H3</span></div>
+  <div class="studio-grid first-image-studio video-studio">
+    <section class="creation-panel" :aria-label="t('Tu video y su descripción')">
+      <div class="canvas-header"><span>{{ t('VIDEO LOCAL') }}</span><span>{{ job ? `${job.width} × ${job.height} · ${job.frames} / ${job.fps} fps` : 'MiniMax H3' }}</span></div>
+      <div class="canvas video-canvas" :class="{ 'result-canvas': file }">
+        <video v-if="file" :key="file" :src="file" controls playsinline preload="metadata" class="generated-video" :aria-label="t('Video creado con Veltria')" @error="mediaError = true"></video>
+        <div v-else class="video-placeholder"><Clapperboard :size="48" aria-hidden="true"/><h2>{{ active ? t('Tu video está tomando forma.') : t('Primero, una vista previa corta.') }}</h2><p>{{ active ? t('El resultado aparecerá aquí. El progreso llega del motor, sin tiempos inventados.') : t('Comprueba el perfil y crea una vista previa antes de pasar a un clip más largo.') }}</p></div>
+      </div>
+      <p v-if="mediaError" class="creation-feedback warning">{{ t('No se pudo reproducir este video. Puedes guardarlo para abrirlo con un reproductor compatible.') }}</p>
+      <div v-if="job" class="creation-feedback" aria-live="polite"><strong>{{ t(job.message) }}</strong><progress v-if="active" :max="job.steps" :value="job.step ?? undefined" :aria-label="t('Progreso de video')"></progress><div class="action-row"><a v-if="file" :href="file + '?download=1'" class="primary-button" download><Download :size="16"/>{{ t('Guardar video') }}</a><button v-if="(active || job.status === 'interrupted') && !['submitting', 'saving'].includes(job.status)" class="text-button" :disabled="busy" @click="emit('cancel', job.id)">{{ t('Cancelar este video') }}</button><button v-if="job.status === 'interrupted' && job.enginePromptId" class="text-button" :disabled="busy" @click="emit('reconcile', job.id)">{{ t('Comprobar resultado del video') }}</button></div></div>
+      <div class="prompt-section"><label for="video-prompt"><Clapperboard :size="17"/>{{ t('Describe tu video') }}</label><textarea id="video-prompt" :value="prompt" maxlength="4000" :placeholder="t('Una escena, su movimiento, la cámara y el sonido que imaginas…')" @input="emit('update:prompt', ($event.target as HTMLTextAreaElement).value)"></textarea><div class="prompt-bottom"><span>{{ t('Tu descripción se envía tal como la escribes.') }}</span><span>{{ prompt.length }} / 4000</span></div></div>
+    </section>
+    <aside class="creation-settings" :aria-label="t('Perfil de video')">
+      <div class="section-heading"><h2>MiniMax H3</h2></div><span class="pill">{{ state?.verifiedPresets.includes(preset) ? t('Comprobado en este equipo') : t('Experimental · generación sin verificar') }}</span>
+      <p class="helper">{{ t('Reutiliza el modelo y los decodificadores que ya están en ComfyUI. No instala otro motor ni descarga pesos.') }}</p>
+      <div class="option-section"><h2>{{ t('Duración') }}</h2><div class="video-duration"><button :class="{ selected: preset === 'preview' }" :aria-pressed="preset === 'preview'" @click="emit('update:preset', 'preview')">{{ t('Vista previa · 0,9 s') }}</button><button :disabled="!state?.verifiedPresets.includes('preview')" :class="{ selected: preset === 'short' }" :aria-pressed="preset === 'short'" @click="emit('update:preset', 'short')">{{ t('Clip corto · 5,2 s') }}</button></div><p class="helper">{{ t('Completa una vista previa para habilitar clips más largos. Las duraciones son aproximadas, a 24 fps.') }}</p></div>
+      <section v-if="state && state.preparation.status !== 'idle'" class="preparation-feedback" aria-live="polite"><strong>{{ state.preparation.status === 'ready' && state.verifiedPresets.length ? t('El perfil tiene resultados comprobados. Cada duración se valida por separado.') : t(state.preparation.message) }}</strong><progress v-if="preparing" :aria-label="t('Comprobando el video…')"></progress><button v-if="preparing" class="text-button" :disabled="busy" @click="emit('pause')"><Pause :size="16"/>{{ t('Detener comprobación') }}</button></section>
+      <details class="profile-details"><summary>{{ t('Receta y límites del video') }}</summary><p>{{ t('448 × 256 píxeles, 24 fps y 20 pasos. MP4 con video H.264 y el audio generado por H3.') }}</p><p>{{ t('El perfil usa nodos nativos. No ejecuta workflows importados ni activa extensiones.') }}</p><p>{{ t('Imagen a video, referencias y otras resoluciones quedan pendientes.') }}</p><a href="https://huggingface.co/Comfy-Org/MiniMax-H3" target="_blank" rel="noreferrer">{{ t('Ver fuente del modelo') }}</a></details>
+      <div class="prepare-action studio-main-action"><button class="primary-button full" :disabled="disabled" @click="action"><Clapperboard :size="17"/>{{ label }}</button><button v-if="state?.canCreate && !active" class="text-button" @click="emit('plan')">{{ t('Revisar recursos y componentes') }}</button><p>{{ t('Comprobar el perfil no inicia una generación.') }}</p></div>
+    </aside>
+  </div>
+  <div class="creation-mobile-action"><button class="primary-button" :disabled="disabled" @click="action">{{ label }}</button></div>
+  <dialog ref="dialog" class="preparation-dialog" aria-labelledby="video-plan-title" @cancel="emit('closePlan')" @close="emit('closePlan')">
+    <template v-if="plan"><button class="icon-button plan-close" :aria-label="t('Cerrar plan de video')" @click="emit('closePlan')"><X :size="22"/></button><h2 id="video-plan-title">{{ t('Preparar tu primer video') }}</h2><p>{{ t('Se reutilizarán tus componentes existentes de MiniMax H3. No se descargarán archivos ni se modificarán sus modelos.') }}</p>
+      <dl class="download-plan"><div><dt>{{ t('Descarga pendiente') }}</dt><dd>{{ bytes(plan.downloadBytes) }}</dd></div><div><dt>{{ t('Margen para resultados') }}</dt><dd>{{ bytes(plan.requiredBytes) }}</dd></div><div><dt>{{ t('RAM del equipo') }}</dt><dd>{{ bytes(plan.ramTotal) }}</dd></div><div><dt>{{ t('Memoria gráfica total') }}</dt><dd>{{ bytes(plan.vramTotal) }}</dd></div><div><dt>{{ t('RAM disponible') }}</dt><dd>{{ bytes(plan.ramAvailable) }}</dd></div><div><dt>{{ t('Disponible en el disco') }}</dt><dd>{{ bytes(plan.availableBytes) }}</dd></div></dl>
+      <p v-for="blocker in plan.blockers" :key="blocker" class="warning">{{ t(blocker) }}</p><p v-for="warning in plan.warnings" :key="warning" class="warning">{{ t(warning) }}</p>
+      <details><summary>{{ t('Componentes detectados') }}</summary><dl class="video-components"><div v-for="component in plan.components" :key="component.filename"><dt>{{ t(component.role) }} · {{ t(component.status === 'present' ? 'Detectado' : component.status === 'missing' ? 'Falta' : 'Archivo no válido') }}</dt><dd>{{ component.filename }}<br>{{ bytes(component.bytes) }}<br>{{ component.path }}</dd></div></dl></details>
+      <p><a :href="plan.licenseUrl" target="_blank" rel="noreferrer">MiniMax H3 Community License</a> · <a :href="plan.source" target="_blank" rel="noreferrer">{{ t('Fuente del archivo') }}</a></p><label class="license-consent"><input v-model="license" type="checkbox">{{ t('He revisado las condiciones de uso del modelo existente.') }}</label><label class="license-consent"><input v-model="consent" type="checkbox">{{ t('Quiero probar este perfil experimental; entiendo que puede tardar o agotar la memoria.') }}</label><p v-if="error" class="warning" role="alert">{{ t(error) }}</p><button class="primary-button full" :disabled="busy || !plan.canPrepare || !license || !consent" @click="emit('prepare')">{{ t('Comprobar y preparar video') }}</button><button v-if="plan.blockers.length" class="text-button" @click="emit('closePlan'); emit('device')">{{ t('Revisar mi equipo') }} <ArrowRight :size="15"/></button>
+    </template>
+  </dialog>
+</template>

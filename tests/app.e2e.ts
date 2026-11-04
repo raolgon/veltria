@@ -1,0 +1,237 @@
+import { test, expect, _electron as electron } from '@playwright/test'
+import { mkdtemp, rm, access } from 'node:fs/promises'
+import { join, resolve } from 'node:path'
+import { tmpdir } from 'node:os'
+import { launchService } from '../scripts/supervisor'
+
+let directory: string, service: Awaited<ReturnType<typeof launchService>>
+test.beforeAll(async () => {
+  directory = await mkdtemp(join(tmpdir(), 'Veltria UI smoke '))
+  service = await launchService({ executable: resolve('build/service', process.platform === 'win32' ? 'veltria-service.exe' : 'veltria-service'), uiDir: resolve('apps/ui/dist'), dataDir: directory })
+})
+test.afterAll(async () => { await service?.stop(); if (directory) await rm(directory, { recursive: true, force: true }) })
+async function launchUrl() {
+  const attached = await launchService({ executable: '', uiDir: resolve('apps/ui/dist'), dataDir: directory })
+  return `${attached.ready.origin}/#launch=${attached.ready.nonce}`
+}
+test('navegador: estados reales, persistencia y Obsidian responsive', async ({ page, context }) => {
+  const errors: string[] = []; page.on('pageerror', e => errors.push(e.message))
+  await page.goto(await launchUrl())
+  await expect(page.getByText('Servicio local conectado')).toBeVisible()
+  await expect(page).not.toHaveURL(/launch=/)
+  expect((await context.cookies()).find(c => c.name === 'veltria_session')?.httpOnly).toBe(true)
+  await page.getByLabel('Describe lo que imaginas').fill('Mi idea permanece: 日本語 y acentos.')
+  for (const theme of ['Claro', 'Oscuro']) {
+    for (const [width, height] of [[320, 568], [390, 844], [768, 1024], [1363, 900], [740, 360]]) {
+      await page.setViewportSize({ width, height })
+      const nav = width <= 740 ? page.locator('.mobile-nav') : page.locator('.sidebar nav')
+      await page.getByLabel('Describe lo que imaginas').blur()
+      await nav.getByRole('button', { name: 'Ajustes' }).click()
+      await page.getByRole('button', { name: theme, exact: true }).click()
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme === 'Claro' ? 'light' : 'dark')
+      await expect(page.getByText('Apariencia guardada en este equipo.')).toBeVisible()
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+      await nav.getByRole('button', { name: 'Mi equipo' }).click()
+      await expect(page.getByRole('heading', { name: 'Mi equipo' })).toBeVisible()
+      await expect(page.locator('.hardware-list')).toContainText('Procesador')
+      await page.getByText('Avanzado · Usar una instalación existente de ComfyUI', { exact: true }).click()
+      await expect(page.getByLabel('Dirección local de ComfyUI')).toBeVisible()
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+      if (width === 320) await page.screenshot({ path: `test-results/device-${theme}-320.png`, fullPage: true })
+      await nav.getByRole('button', { name: 'Crear', exact: true }).click()
+      await expect(page.getByLabel('Describe lo que imaginas')).toHaveValue('Mi idea permanece: 日本語 y acentos.')
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+      if (width === 320 || width === 1363) await page.screenshot({ path: `test-results/create-${theme}-${width}.png`, fullPage: true })
+    }
+  }
+  await page.setViewportSize({ width: 1363, height: 900 })
+  await page.reload()
+  await expect(page.getByText('Servicio local conectado')).toBeVisible()
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+  await expect(page.getByLabel('Describe lo que imaginas')).toHaveValue('Mi idea permanece: 日本語 y acentos.')
+  await page.locator('.sidebar nav').getByRole('button', { name: 'Ajustes' }).click()
+  await page.getByRole('button', { name: 'Sistema', exact: true }).click()
+  await page.emulateMedia({ colorScheme: 'light' }); await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
+  await page.emulateMedia({ colorScheme: 'dark' }); await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+  expect(errors).toEqual([])
+})
+
+test('Electron: mismo servicio y preferencia que el navegador, contenedor aislado', async ({ page }) => {
+  test.skip(!!process.env.VELTRIA_SKIP_ELECTRON, 'Host sin soporte de ventana Electron; queda pendiente.')
+  await page.goto(await launchUrl()); await expect(page.getByText('Servicio local conectado')).toBeVisible()
+  await page.locator('.sidebar nav').getByRole('button', { name: 'Ajustes' }).click()
+  await page.getByRole('button', { name: 'Claro', exact: true }).click()
+  await expect(page.getByText('Apariencia guardada en este equipo.')).toBeVisible()
+  const packaged = process.env.VELTRIA_ELECTRON_EXECUTABLE
+  const app = await electron.launch({ chromiumSandbox: true, ...(packaged ? { executablePath: packaged } : {}), args: packaged ? [] : [resolve('apps/desktop/dist/main.cjs')], env: { ...process.env, VELTRIA_DATA_DIR: directory } })
+  try {
+    const window = await app.firstWindow()
+    await expect(window.getByText('Servicio local conectado')).toBeVisible()
+    await expect(window.getByRole('region', { name: 'Recursos del equipo' })).toContainText('En vivo')
+    await expect(window.locator('html')).toHaveAttribute('data-theme', 'light')
+    expect(await window.evaluate(() => (window as any).veltriaDesktop)).toEqual({ sandboxed: true, contextIsolated: true })
+    expect(await window.evaluate(() => typeof (window as any).require)).toBe('undefined')
+    await page.getByRole('button', { name: 'Oscuro', exact: true }).click()
+    await expect(window.locator('html')).toHaveAttribute('data-theme', 'dark')
+    await expect.poll(() => app.evaluate(({ nativeTheme }) => nativeTheme.themeSource)).toBe('dark')
+    await page.getByRole('button', { name: 'English', exact: true }).click()
+    await expect(window.locator('html')).toHaveAttribute('lang', 'en')
+    await expect(window.getByRole('region', { name: 'Computer resources' })).toContainText('Live')
+    await expect.poll(() => app.evaluate(({ BrowserWindow }) => {
+      const window = BrowserWindow.getAllWindows()[0]
+      let title = ''
+      const item = { getURL: () => new URL('/api/v1/artifacts/00000000-0000-4000-8000-000000000000?download=1', window.webContents.getURL()).href, getFilename: () => 'test.png', setSaveDialogOptions: (options: { title: string }) => { title = options.title } }
+      // Inspect the real download handler's options without opening a native dialog or saving a file.
+      ;(window.webContents.session as any).emit('will-download', { preventDefault() {} }, item)
+      return title
+    })).toBe('Save image')
+    await window.screenshot({ path: 'test-results/electron-english.png' })
+    await page.getByRole('button', { name: 'Español', exact: true }).click()
+    await expect(window.locator('html')).toHaveAttribute('lang', 'es')
+    await window.screenshot({ path: 'test-results/electron-dark.png' })
+  } finally { await app.close() }
+  expect((await fetch(`${service.ready.origin}/api/v1/identity`)).status).toBe(200)
+})
+
+test('Electron propietario: arranca y cierra su auxiliar con rutas de datos con espacios', async () => {
+  test.skip(!!process.env.VELTRIA_SKIP_ELECTRON, 'Host sin soporte de ventana Electron; queda pendiente.')
+  const ownData = join(directory, 'Desktop owned data with spaces')
+  const packaged = process.env.VELTRIA_ELECTRON_EXECUTABLE
+  const app = await electron.launch({ chromiumSandbox: true, ...(packaged ? { executablePath: packaged } : {}), args: packaged ? [] : [resolve('apps/desktop/dist/main.cjs')], env: { ...process.env, VELTRIA_DATA_DIR: ownData } })
+  const window = await app.firstWindow()
+  await expect(window.getByText('Servicio local conectado')).toBeVisible()
+  await app.close()
+  await expect.poll(async () => { try { await access(join(ownData, '.service-lock')); return true } catch { return false } }).toBe(false)
+  await access(join(ownData, 'settings.sqlite'))
+})
+
+test('sin sesión: error útil y tema temporal, sin inventar hardware', async ({ page }) => {
+  await page.goto(service.ready.origin)
+  await expect(page.getByRole('alert')).toContainText('Sesión ausente')
+  await page.locator('.sidebar nav').getByRole('button', { name: 'Ajustes' }).click()
+  await page.getByRole('button', { name: 'Claro', exact: true }).click()
+  await expect(page.getByRole('status')).toContainText('Apariencia temporal')
+})
+
+test('recursos laterales: actualización, fallo, recuperación y pausa al ocultar', async ({ page }) => {
+  let calls = 0
+  await page.route('**/api/v1/resources', async route => {
+    calls++
+    if (calls === 3) { await route.fulfill({ status: 503, json: { message: 'Fixture: sensor no disponible' } }); return }
+    const memory = { total: 16 * 1024 ** 3, used: (calls === 1 ? 4 : 8) * 1024 ** 3, available: (calls === 1 ? 12 : 8) * 1024 ** 3 }
+    await route.fulfill({ json: {
+      sampledAt: new Date().toISOString(), platform: 'win32', wsl: false,
+      cpu: { percent: calls === 1 ? 12 : 68 }, ram: memory,
+      gpus: [{ name: 'GPU de fixture; sin inferencia', percent: calls >= 4 ? null : 43, memory: { total: 6 * 1024 ** 3, used: 2 * 1024 ** 3, available: 4 * 1024 ** 3 } }],
+      disk: { total: 100 * 1024 ** 3, used: 40 * 1024 ** 3, available: 60 * 1024 ** 3, path: 'C:\\fixture' }
+    } })
+  })
+  await page.setViewportSize({ width: 1363, height: 900 }); await page.goto(await launchUrl())
+  const monitor = page.getByRole('region', { name: 'Recursos del equipo' })
+  const cpu = monitor.locator('.resource-row').filter({ hasText: 'CPU' })
+  await expect(cpu.locator('.resource-value')).toHaveText('12 %')
+  await expect(monitor).toContainText('4 GiB / 16 GiB')
+  await expect(monitor).toContainText('60 GiB libres')
+  await expect(cpu.locator('.resource-value')).toHaveText('68 %', { timeout: 7000 })
+  await expect(monitor).toContainText('8 GiB / 16 GiB')
+  await page.screenshot({ path: 'test-results/resources-desktop-fixture.png', fullPage: true })
+  await expect(monitor).toContainText('Lectura no disponible', { timeout: 7000 })
+  await expect(monitor.getByRole('meter')).toHaveCount(0)
+  await expect(monitor).toContainText('En vivo', { timeout: 7000 })
+  await expect(monitor.locator('.resource-row').filter({ hasText: 'GPU' }).locator('.resource-value')).toHaveText('—')
+  await page.setViewportSize({ width: 1100, height: 780 })
+  expect(await monitor.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
+  await page.setViewportSize({ width: 768, height: 1024 })
+  await expect(cpu.locator('.resource-compact-value')).toHaveText('68 %')
+  expect(await monitor.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
+  await page.screenshot({ path: 'test-results/resources-tablet-fixture.png', fullPage: true })
+  await page.evaluate(() => { Object.defineProperty(document, 'hidden', { configurable: true, value: true }); document.dispatchEvent(new Event('visibilitychange')) })
+  const before = calls
+  await page.waitForTimeout(3500)
+  expect(calls).toBe(before)
+  await page.evaluate(() => { Object.defineProperty(document, 'hidden', { configurable: true, value: false }); document.dispatchEvent(new Event('visibilitychange')) })
+  await expect.poll(() => calls).toBeGreaterThan(before)
+})
+
+test('idioma: cambio inmediato, dos ventanas, reapertura, contenido propio y móvil', async ({ page, context }) => {
+  const errors: string[] = []; page.on('pageerror', error => errors.push(error.message))
+  await page.goto(await launchUrl())
+  const draft = 'Crear imagen — mi descripción 日本語'
+  await page.getByLabel('Describe lo que imaginas').fill(draft)
+  const peer = await context.newPage()
+  await peer.goto(service.ready.origin)
+  await expect(peer.getByText('Servicio local conectado')).toBeVisible()
+  await page.locator('.sidebar nav').getByRole('button', { name: 'Ajustes' }).click()
+  await page.getByRole('button', { name: 'English', exact: true }).click()
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en')
+  await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible()
+  await expect(page.getByRole('status')).toHaveText('Language saved on this computer.')
+  await expect(peer.locator('html')).toHaveAttribute('lang', 'en')
+  await expect(peer.getByRole('heading', { name: 'What will you imagine today?' })).toBeVisible()
+  await expect(page.locator('.side-note')).toHaveCount(0)
+  await page.reload()
+  await expect(page.getByRole('button', { name: 'Settings', exact: true })).toBeVisible()
+  await expect(page.getByLabel('Describe what you imagine')).toHaveValue(draft)
+  await page.getByText('Model and profile limitations', { exact: true }).click()
+  await expect(page.getByText('Classic 2022 model: lower quality and understanding than recent models.')).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Computer resources' })).toContainText('Live')
+  await page.evaluate(() => window.scrollTo(0, 0))
+  await page.screenshot({ path: 'test-results/english-create-desktop.png' })
+  for (const [width, height] of [[320, 568], [390, 844], [768, 1024], [1363, 900]]) {
+    await page.setViewportSize({ width, height })
+    const nav = width <= 740 ? page.locator('.mobile-nav') : page.locator('.sidebar nav')
+    await nav.getByRole('button', { name: 'Settings', exact: true }).click()
+    await page.getByRole('button', { name: width === 390 ? 'Dark' : 'Light', exact: true }).click()
+    await expect(page.getByRole('button', { name: 'English', exact: true })).toHaveAttribute('aria-pressed', 'true')
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    if (width === 320) { await page.evaluate(() => window.scrollTo(0, 0)); await page.screenshot({ path: 'test-results/english-settings-mobile.png' }) }
+    await nav.getByRole('button', { name: 'Create', exact: true }).click()
+    await expect(page.getByLabel('Describe what you imagine')).toHaveValue(draft)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    if (width === 320) { await page.evaluate(() => window.scrollTo(0, 0)); await page.screenshot({ path: 'test-results/english-create-mobile.png' }) }
+  }
+  await page.locator('.sidebar nav').getByRole('button', { name: 'My computer', exact: true }).click()
+  await page.getByText('Advanced · Use an existing ComfyUI installation', { exact: true }).click()
+  await page.getByLabel('Local ComfyUI address').fill('http://192.168.1.2:8188')
+  await page.getByRole('button', { name: 'Save address', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('Invalid input. Check the values and try again.')
+  await page.locator('.sidebar nav').getByRole('button', { name: 'Settings', exact: true }).click()
+  await page.getByRole('button', { name: 'Español', exact: true }).click()
+  await expect(page.locator('html')).toHaveAttribute('lang', 'es')
+  await expect(peer.locator('html')).toHaveAttribute('lang', 'es')
+  await page.locator('.sidebar nav').getByRole('button', { name: 'Crear', exact: true }).click()
+  await expect(page.getByLabel('Describe lo que imaginas')).toHaveValue(draft)
+  await peer.close()
+  expect(errors).toEqual([])
+})
+
+test('catálogo real: dos modelos, configuraciones, plan y navegación en escritorio y móvil', async ({ page }) => {
+  const errors: string[] = []; page.on('pageerror', error => errors.push(error.message))
+  await page.goto(await launchUrl())
+  await expect(page.getByText('Servicio local conectado')).toBeVisible()
+  for (const [width, height, theme, locale] of [[1363, 900, 'dark', 'es'], [320, 568, 'light', 'es'], [320, 568, 'dark', 'en'], [1363, 900, 'light', 'en']] as const) {
+    await page.evaluate(async ({ theme, locale }) => {
+      const session = await fetch('/api/v1/session').then(response => response.json())
+      await fetch('/api/v1/settings', { method: 'PATCH', headers: { 'content-type': 'application/json', 'x-veltria-csrf': session.csrf }, body: JSON.stringify({ theme, locale }) })
+    }, { theme, locale })
+    await expect(page.locator('html')).toHaveAttribute('lang', locale)
+    await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+    await page.setViewportSize({ width, height })
+    const nav = width <= 740 ? page.locator('.mobile-nav') : page.locator('.sidebar nav')
+    await nav.getByRole('button', { name: locale === 'en' ? 'Models' : 'Modelos', exact: true }).click()
+    await expect(page.locator('.model-row')).toHaveCount(2)
+    await expect(page.locator('.model-row').last()).toContainText('DreamShaper 8')
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    await page.screenshot({ path: `test-results/catalog-${locale}-${theme}-${width}.png`, fullPage: true })
+  }
+  await page.locator('.model-row').last().getByRole('button', { name: 'Review download', exact: true }).click()
+  const plan = page.getByRole('dialog')
+  await expect(plan).toBeVisible()
+  await expect(plan).toContainText('DreamShaper 8')
+  await expect(plan.getByRole('button', { name: 'Download and prepare', exact: true })).toBeDisabled()
+  await page.keyboard.press('Escape')
+  await page.setViewportSize({ width: 768, height: 1024 })
+  await page.locator('.sidebar nav').getByRole('button', { name: 'Models', exact: true }).click()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  expect(errors).toEqual([])
+})

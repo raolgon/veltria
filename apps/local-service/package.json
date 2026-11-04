@@ -1,0 +1,15 @@
+{
+  "name": "@veltria/local-service",
+  "version": "0.4.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "fastify": "5.12.8",
+    "@fastify/cookie": "11.1.5",
+    "@fastify/static": "10.1.9",
+    "@veltria/contracts": "workspace:*",
+    "@veltria/adapters": "workspace:*",
+    "zod": "4.6.7",
+    "@veltria/core": "workspace:*"
+  }
+}

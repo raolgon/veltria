@@ -1,0 +1,9 @@
+{
+  "name": "@veltria/contracts",
+  "version": "0.4.0",
+  "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": {
+    "zod": "4.6.7"
+  }
+}

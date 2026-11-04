@@ -1,0 +1,108 @@
+{
+  "name": "veltria",
+  "version": "0.4.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.4.4",
+  "engines": {
+    "node": ">=24.13.0 <25",
+    "bun": "1.4.4"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "bun scripts/dev.ts",
+    "build": "bun scripts/build.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json && vue-tsc --noEmit -p apps/ui/tsconfig.json",
+    "start:web": "bun scripts/web.ts",
+    "start:desktop": "node scripts/desktop.mjs",
+    "test": "vitest run && bun test ./tests/service.bun.ts ./tests/creation.bun.ts ./tests/video.bun.ts && bun scripts/smoke-service.ts",
+    "test:ui": "playwright test",
+    "package:linux": "bun run build && electron-builder --linux AppImage --publish never",
+    "package:win": "bun scripts/build.ts --target=bun-windows-x64-baseline && electron-builder --win nsis --x64 --publish never",
+    "package:dir": "bun run build && electron-builder --dir --publish never",
+    "postinstall": "node scripts/ensure-electron.mjs",
+    "package:win:dir": "bun scripts/build.ts --target=bun-windows-x64-baseline && electron-builder --win --dir --x64 --publish never"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "@types/bun": "1.4.4",
+    "@types/node": "24.13.0",
+    "electron": "45.2.2",
+    "electron-builder": "26.18.0",
+    "esbuild": "0.28.2",
+    "typescript": "6.0.3",
+    "vitest": "5.1.0",
+    "vue-tsc": "3.3.14",
+    "@veltria/contracts": "workspace:*",
+    "@veltria/core": "workspace:*",
+    "zod": "4.6.7"
+  },
+  "trustedDependencies": [
+    "electron",
+    "esbuild"
+  ],
+  "build": {
+    "appId": "app.veltria.desktop",
+    "productName": "Veltria",
+    "asar": true,
+    "directories": {
+      "app": "apps/desktop",
+      "output": "release/0.4.0"
+    },
+    "files": [
+      "dist/**",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "apps/ui/dist",
+        "to": "ui"
+      }
+    ],
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Graphics",
+      "executableName": "veltria",
+      "extraResources": [
+        {
+          "from": "build/service/veltria-service",
+          "to": "service/veltria-service"
+        }
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "signAndEditExecutable": false,
+      "extraResources": [
+        {
+          "from": "build/service/veltria-service.exe",
+          "to": "service/veltria-service.exe"
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "mac": {
+      "target": [
+        "dir"
+      ],
+      "category": "public.app-category.graphics-design",
+      "extraResources": [
+        {
+          "from": "build/service/veltria-service",
+          "to": "service/veltria-service"
+        }
+      ]
+    },
+    "publish": null
+  }
+}
