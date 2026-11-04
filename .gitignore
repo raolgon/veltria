@@ -1,0 +1,31 @@
+node_modules/
+dist/
+build/
+release/
+test-results/
+playwright-report/
+.veltria-data/
+*.sqlite*
+*.log
+
+# Local configuration, credentials and generated user content
+.env
+.env.*
+!.env.example
+!.env.sample
+*.pem
+*.key
+.service-lock/
+models/
+creations/
+image-engine/
+video-engine/
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+
+# Operating system and editor files
+.DS_Store
+Thumbs.db
+Desktop.ini
