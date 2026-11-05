@@ -1,6 +1,6 @@
 {
   "name": "veltria",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "private": true,
   "type": "module",
   "packageManager": "bun@1.4.4",
@@ -50,7 +50,7 @@
     "asar": true,
     "directories": {
       "app": "apps/desktop",
-      "output": "release/0.6.0"
+      "output": "release/0.6.1"
     },
     "files": [
       "dist/**",

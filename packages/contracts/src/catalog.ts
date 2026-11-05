@@ -19,6 +19,6 @@ export const catalogSchema = z.object({
 export type Catalog = z.infer<typeof catalogSchema>
 export const catalogSelectionSchema = z.object({ configurationId: z.string().min(1).max(100) }).strict()
 
-export const discoveryResultSchema = z.object({ repository: z.string(), revision: z.string(), kind: z.enum(['model', 'lora']), family: z.string(), supported: z.boolean(), files: z.array(z.object({ name: z.string(), bytes: z.number() })), reason: z.string(), source: z.string().url() })
-export const discoverySchema = z.object({ results: z.array(discoveryResultSchema), partial: z.boolean() })
+export const discoveryResultSchema = z.object({ repository: z.string(), revision: z.string(), kind: z.enum(['model', 'lora']), downloads: z.number().nonnegative().nullable().optional(), family: z.string(), supported: z.boolean(), files: z.array(z.object({ name: z.string(), bytes: z.number() })), reason: z.string(), source: z.string().url() })
+export const discoverySchema = z.object({ results: z.array(discoveryResultSchema), partial: z.boolean(), nextCursor: z.string().nullable().optional(), hardwareReason: z.string().nullable().optional() })
 export type DiscoveryResult = z.infer<typeof discoveryResultSchema>

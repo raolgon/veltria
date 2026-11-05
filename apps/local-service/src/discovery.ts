@@ -5,11 +5,17 @@ import { discoveryResultSchema } from '@veltria/contracts'
 const repository = z.string().regex(/^[\w.-]+\/[\w.-]+$/).max(180)
 export const discoverInput = z.object({ query: z.string().trim().max(100), kind: z.enum(['all', 'model', 'lora']).default('all') }).strict()
 export const adoptInput = z.object({ repository, file: z.string().max(300), strength: z.number().min(0).max(1.5).default(0.7), baseModelId: z.string().max(100).default('sd15-starter') }).strict()
+export const browseInput = z.object({ kind: z.enum(['all', 'model', 'lora']).default('all'), cursor: z.string().min(1).max(4000).optional() }).strict()
 const fileSchema = z.object({ rfilename: z.string(), lfs: z.object({ sha256: z.string().regex(/^[a-f0-9]{64}$/), size: z.number().int().positive() }).optional() })
-const metadata = z.object({ id: repository, sha: z.string().regex(/^[a-f0-9]{40}$/), tags: z.array(z.string()).default([]), gated: z.union([z.boolean(), z.string()]).optional(), cardData: z.record(z.string(), z.unknown()).nullish(), siblings: z.array(fileSchema).default([]) })
-async function hub(path: string) {
+const metadata = z.object({ id: repository, sha: z.string().regex(/^[a-f0-9]{40}$/), downloads: z.number().int().nonnegative().nullish(), tags: z.array(z.string()).default([]), gated: z.union([z.boolean(), z.string()]).optional(), cardData: z.record(z.string(), z.unknown()).nullish(), siblings: z.array(fileSchema).default([]) })
+async function hub(path: string, page?: { nextCursor: string | null }) {
   const response = await fetch('https://huggingface.co/api/models' + path, { signal: AbortSignal.timeout(8000), redirect: 'error' })
   if (!response.ok) throw new Error('No se pudo consultar Hugging Face. Vuelve a buscar; tu catálogo local sigue disponible.')
+  if (page) {
+    const link = response.headers.get('link')?.match(/<([^>]+)>; rel="next"/)
+    const next = link ? new URL(link[1]) : null
+    page.nextCursor = next?.origin === 'https://huggingface.co' && next.pathname === '/api/models' ? next.searchParams.get('cursor') : null
+  }
   const reader = response.body!.getReader(); let bytes = 0; const chunks: Uint8Array[] = []
   try { for (;;) { const { done, value } = await reader.read(); if (done) break; bytes += value.length; if (bytes > 2 * 1024 ** 2) throw new Error('La respuesta del proveedor supera el límite. Busca un nombre más concreto.'); chunks.push(value) } }
   finally { await reader.cancel() }
@@ -22,8 +28,9 @@ export function inspectModel(value: unknown) {
   const known = imageModels.some(model => model.source === `https://huggingface.co/${data.id}` && model.url.includes('/' + data.sha + '/'))
   const sd15 = known || /stable-diffusion-v1-5|stable-diffusion-v1.5|sd-1.5|sd15|sd-1-5/.test(base + ' ' + tags)
   const files = data.siblings.filter(file => file.rfilename.endsWith('.safetensors') && file.lfs && !file.rfilename.includes('/') && !/inpainting|lcm|turbo|unet|text_encoder/i.test(file.rfilename) && file.lfs.size < 6 * 1024 ** 3).sort((a,b) => Number(imageModels.some(model => model.sha256 === b.lfs!.sha256)) - Number(imageModels.some(model => model.sha256 === a.lfs!.sha256)) || a.lfs!.size - b.lfs!.size)
-  const supported = sd15 && !data.gated && files.length > 0 && !/lycoris|dora|loha|lokr|locon/.test(tags)
-  return { data, result: discoveryResultSchema.parse({ repository: data.id, revision: data.sha, kind: lora ? 'lora' : 'model', family: sd15 ? 'SD 1.5' : 'unknown', supported, files: files.map(file => ({ name: file.rfilename, bytes: file.lfs!.size })), reason: data.gated ? 'Este repositorio requiere acceso del proveedor; la conexión de cuentas está pendiente.' : supported ? 'Familia declarada compatible; ejecución sin comprobar.' : 'Veltria todavía no tiene una receta compatible confirmada para estos archivos.', source: `https://huggingface.co/${data.id}` }) }
+  const standardRecipe = !/(?:lcm|tcd|lightning|turbo|flow-matching|flash-sd)/i.test(data.id + ' ' + tags)
+  const supported = standardRecipe && sd15 && !data.gated && files.length > 0 && !/lycoris|dora|loha|lokr|locon/.test(tags)
+  return { data, result: discoveryResultSchema.parse({ repository: data.id, downloads: data.downloads ?? null, revision: data.sha, kind: lora ? 'lora' : 'model', family: sd15 ? 'SD 1.5' : 'unknown', supported, files: files.map(file => ({ name: file.rfilename, bytes: file.lfs!.size })), reason: data.gated ? 'Este repositorio requiere acceso del proveedor; la conexión de cuentas está pendiente.' : supported ? 'Familia declarada compatible; ejecución sin comprobar.' : 'Veltria todavía no tiene una receta compatible confirmada para estos archivos.', source: `https://huggingface.co/${data.id}` }) }
 }
 export async function discover(query: string, kind: string) {
   const terms: Record<string,string> = { photography: 'realistic', fotografía: 'realistic', fotografia: 'realistic', ilustración: 'illustration', ilustracion: 'illustration', personajes: 'character', anime: 'anime' }
@@ -33,6 +40,24 @@ export async function discover(query: string, kind: string) {
   const entries = results.flatMap(item => item.status === 'fulfilled' ? [item.value.result] : [])
   if (raw.length && !entries.length) throw new Error('No se pudieron comprobar los resultados. Vuelve a buscar.')
   return { results: entries.filter(item => kind === 'all' || item.kind === kind), partial: results.some(item => item.status === 'rejected') }
+}
+// Pages retain the provider's ranking; incompatible repositories do not stop pagination.
+export async function browseCompatible(kind: string, cursor?: string, checkHeader = verifyRemoteHeader) {
+  const page = { nextCursor: null as string | null }
+  const params = new URLSearchParams({ filter: 'base_model:runwayml/stable-diffusion-v1-5', pipeline_tag: 'text-to-image', sort: 'downloads', direction: '-1', limit: '12' })
+  if (cursor) params.set('cursor', cursor)
+  const raw = z.array(z.object({ id: repository })).max(12).parse(await hub('?' + params, page))
+  const results = await Promise.allSettled(raw.map(item => hub(`/${item.id}?blobs=true`).then(inspectModel)))
+  if (raw.length && results.every(item => item.status === 'rejected')) throw new Error('No se pudieron comprobar los resultados. Vuelve a buscar.')
+  const candidates = results.flatMap(item => item.status === 'fulfilled' && item.value.result.supported && (kind === 'all' || item.value.result.kind === kind) ? [item.value] : [])
+  const checked = await Promise.allSettled(candidates.map(async ({data,result}) => {
+    await checkHeader(`${result.source}/resolve/${data.sha}/${encodeURIComponent(result.files[0].name)}`, result.kind === 'lora')
+    return result
+  }))
+  return {
+    results: checked.flatMap(item => item.status === 'fulfilled' ? [item.value] : []).sort((a,b) => (b.downloads ?? -1) - (a.downloads ?? -1)),
+    partial: results.some(item => item.status === 'rejected') || checked.some(item => item.status === 'rejected'), nextCursor: page.nextCursor
+  }
 }
 export function verifyTensorHeader(value: unknown, lora: boolean) {
   const tensors = z.record(z.string(), z.unknown()).parse(value), keys = Object.keys(tensors).filter(key => key !== '__metadata__')

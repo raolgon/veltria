@@ -674,5 +674,12 @@ export const english: Readonly<Record<string, string>> = {
   "No se encontró un archivo verificable compatible.": "No compatible verifiable file was found.",
   "No se encontró un modelo base compatible.": "No compatible base model was found.",
   "El catálogo admite hasta 100 modelos añadidos.": "The catalog supports up to 100 added models.",
-  "Falta el nodo LoraLoader en este motor. Los archivos se conservan.": "This engine is missing the LoraLoader node. Your files are preserved."
+  "Falta el nodo LoraLoader en este motor. Los archivos se conservan.": "This engine is missing the LoraLoader node. Your files are preserved.",
+  "Ver modelos para mi equipo": "Find models for my computer",
+  "Sin escribir una búsqueda. Opciones que Veltria puede preparar, con los más descargados primero.": "No search terms needed. Options Veltria can prepare, most downloaded first.",
+  "Modelos para tu equipo": "Models for your computer",
+  "Ordenados por descargas en Hugging Face. La compatibilidad es estimada hasta crear una imagen en este equipo.": "Sorted by Hugging Face downloads. Compatibility is estimated until an image is generated on this computer.",
+  "descargas en Hugging Face": "downloads on Hugging Face",
+  "Ver más modelos": "Show more models",
+  "Puedes seguir explorando aunque esta página no tenga coincidencias compatibles.": "You can keep exploring even if this page has no compatible matches."
 }

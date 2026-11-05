@@ -265,3 +265,29 @@ test('descubrimiento: intención, filtros, resultados externos y fallo recuperab
   await page.locator('#model-search').fill('')
   await expect(page.locator('.model-row')).toHaveCount(2)
 })
+
+test('explorar compatibles sin texto: popularidad, más páginas y conservación ante fallos', async ({page}) => {
+  await page.route('**/api/v1/creation', async route => {const response=await route.fetch();const state=await response.json();state.recommendation.level='recommended';await route.fulfill({response,json:state})})
+  await page.goto(await launchUrl())
+  await page.evaluate(async()=>{const s=await fetch('/api/v1/session').then(r=>r.json());await fetch('/api/v1/settings',{method:'PATCH',headers:{'content-type':'application/json','x-veltria-csrf':s.csrf},body:JSON.stringify({locale:'es'})})})
+  await page.locator('.sidebar nav').getByRole('button',{name:'Modelos',exact:true}).click()
+  const entry=(name:string,downloads:number)=>({repository:'fixture/'+name,revision:'a'.repeat(40),kind:'model',family:'SD 1.5',supported:true,files:[{name:'full.safetensors',bytes:1024}],reason:'Familia declarada compatible; ejecución sin comprobar.',source:'https://huggingface.co/fixture/'+name,downloads})
+  let calls=0
+  await page.route('**/api/v1/catalog/browse',async route=>{
+    const body=route.request().postDataJSON();expect(body).not.toHaveProperty('query');calls++
+    if(calls===1)await route.fulfill({json:{results:[entry('Less',10),entry('Popular',200)],partial:false,nextCursor:'second'}})
+    else if(calls===2){expect(body.cursor).toBe('second');await route.fulfill({json:{results:[entry('Less',10),entry('Next',5)],partial:false,nextCursor:'third'}})}
+    else await route.fulfill({status:502,json:{message:'No se pudo consultar el proveedor.'}})
+  })
+  await page.locator('#model-search').fill('idea anterior')
+  await page.getByRole('button',{name:'Ver modelos para mi equipo',exact:true}).click()
+  await expect(page.locator('#model-search')).toHaveValue('')
+  await expect(page.locator('.discovery-results h3').first()).toHaveText('Popular')
+  await expect(page.locator('.discovery-results')).toContainText('200 descargas')
+  await page.getByRole('button',{name:'Ver más modelos',exact:true}).click()
+  await expect(page.locator('.discovery-results h3')).toHaveText(['Popular','Less','Next'])
+  for(const [width,height] of [[1363,900],[320,568]]){await page.setViewportSize({width,height});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:`test-results/compatible-browse-${width}.png`,fullPage:true})}
+  await page.getByRole('button',{name:'Ver más modelos',exact:true}).click()
+  await expect(page.getByRole('alert')).toContainText('No se pudo consultar')
+  await expect(page.locator('.discovery-results h3')).toHaveCount(3)
+})

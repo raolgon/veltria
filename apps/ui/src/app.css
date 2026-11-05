@@ -111,3 +111,5 @@ progress::-webkit-progress-bar{background:var(--raised)}progress::-webkit-progre
 
 .catalog-example{width:144px;flex-shrink:0;margin:0}.catalog-example img{display:block;width:100%;height:auto;border-radius:8px}.catalog-example figcaption{font-size:10px;line-height:1.5;color:var(--muted);margin-top:7px}.model-description:has(.catalog-example){align-items:flex-start}@media(max-width:600px){.model-description:has(.catalog-example){flex-wrap:wrap}.catalog-example{width:112px}.model-description:has(.catalog-example)>div{flex-basis:100%}}
 .discovery-results .model-row>div,.model-details{min-width:0;overflow-wrap:anywhere}.discovery-results select{max-width:100%;width:100%}.discovery-results input[type=range]{max-width:100%}
+
+.compatible-browse{margin:22px 0}.compatible-browse p{font-size:13px;line-height:1.7;color:var(--muted);margin-top:10px;max-width:65ch}.compatible-browse button{white-space:normal}

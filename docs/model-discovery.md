@@ -1,3 +1,5 @@
+> Entrega actual: [Veltria 0.6.1, explorar compatibles por popularidad](compatible-browsing.md).
+
 # Descubrir y preparar · Veltria 0.6.0
 
 ## Recorrido

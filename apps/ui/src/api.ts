@@ -29,6 +29,7 @@ export const api = {
   scanSetup: (directory?: string) => request('/setup/scan', setupStateSchema, 'POST', directory ? { directory } : {}),
   setupPlan: (scanId: string, installationId: string) => request('/setup/plan', setupPlanSchema, 'POST', { scanId, installationId }),
   prepareSetup: (revision: string) => request('/setup/prepare', preparationSchema, 'POST', { revision, acceptLicense: true, acceptReuse: true }),
+  browseCompatible: (kind: string, cursor?: string) => request('/catalog/browse', discoverySchema, 'POST', { kind, ...(cursor ? { cursor } : {}) }),
   discover: (query: string, kind = 'all') => request('/catalog/search', discoverySchema, 'POST', { query, kind }),
   adoptModel: (repository: string, file: string, strength = 0.7, baseModelId = 'sd15-starter') => request('/catalog/adopt', configurationEntrySchema, 'POST', { repository, file, strength, baseModelId }),
   catalog: () => request('/catalog', catalogSchema),
