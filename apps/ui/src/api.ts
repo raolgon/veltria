@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { sessionSchema, settingsSchema, hardwareSchema, engineSchema, healthSchema, creationStateSchema, preparationPlanSchema, preparationSchema, jobSchema, librarySchema, resourcesSchema, type Settings, catalogSchema, configurationEntrySchema } from '@veltria/contracts'
+import { sessionSchema, settingsSchema, hardwareSchema, engineSchema, healthSchema, creationStateSchema, preparationPlanSchema, preparationSchema, jobSchema, librarySchema, resourcesSchema, type Settings, catalogSchema, configurationEntrySchema, setupStateSchema, setupPlanSchema } from '@veltria/contracts'
 import { videoPlanSchema, videoStateSchema, videoJobSchema, videoLibrarySchema } from '@veltria/contracts'
 let csrf = ''
 async function request<T>(path: string, schema: z.ZodType<T>, method = 'GET', body?: unknown): Promise<T> {
@@ -25,6 +25,10 @@ export const api = {
   health: () => request('/health', healthSchema),
   engine: () => request('/engine', engineSchema),
   check: () => request('/engine/check', engineSchema, 'POST', {}),
+  setup: () => request('/setup', setupStateSchema),
+  scanSetup: (directory?: string) => request('/setup/scan', setupStateSchema, 'POST', directory ? { directory } : {}),
+  setupPlan: (scanId: string, installationId: string) => request('/setup/plan', setupPlanSchema, 'POST', { scanId, installationId }),
+  prepareSetup: (revision: string) => request('/setup/prepare', preparationSchema, 'POST', { revision, acceptLicense: true, acceptReuse: true }),
   catalog: () => request('/catalog', catalogSchema),
   selectConfiguration: (configurationId: string) => request('/catalog/select', creationStateSchema, 'POST', { configurationId }),
   importConfiguration: (configuration: unknown) => request('/catalog/configurations', configurationEntrySchema, 'POST', configuration),

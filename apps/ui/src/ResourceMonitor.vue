@@ -5,7 +5,7 @@ import type { Resources } from '@veltria/contracts'
 import { bytes, t } from './i18n'
 import { api } from './api'
 
-const props = defineProps<{ connected: boolean }>()
+const props = defineProps<{ connected: boolean; cpuName?: string | null }>()
 const sample = ref<Resources | null>(null), failed = ref(false), now = ref(Date.now())
 let timer: ReturnType<typeof setTimeout> | undefined, disposed = false, pending = false
 const live = computed(() => props.connected && !failed.value && !!sample.value && now.value - Date.parse(sample.value.sampledAt) < 12_000)
@@ -19,11 +19,11 @@ function memoryPercent(memory: Resources['ram'] | undefined) {
   return live.value && memory?.used != null && memory.total ? Math.min(100, memory.used / memory.total * 100) : null
 }
 const rows = computed(() => [
-  { key: 'cpu', label: 'CPU', icon: Cpu, value: live.value ? percent(sample.value?.cpu.percent) : '—', usage: live.value ? sample.value?.cpu.percent ?? null : null, detail: sample.value?.wsl ? t('Uso del procesador del entorno WSL') : t('Uso del procesador de todo el equipo') },
-  { key: 'ram', label: 'RAM', icon: MemoryStick, value: memoryLabel(sample.value?.ram), usage: memoryPercent(sample.value?.ram), detail: live.value ? t("{0} disponibles", { 0: bytes(sample.value!.ram.available) }) : t('Memoria del equipo') },
+  { key: 'cpu', label: 'CPU', componentName: props.cpuName?.trim() || null, icon: Cpu, value: live.value ? percent(sample.value?.cpu.percent) : '—', usage: live.value ? sample.value?.cpu.percent ?? null : null, detail: [props.cpuName?.trim(), sample.value?.wsl ? t('Uso del procesador del entorno WSL') : t('Uso del procesador de todo el equipo')].filter(Boolean).join(' · ') },
+  { key: 'ram', label: 'RAM', componentName: null, icon: MemoryStick, value: memoryLabel(sample.value?.ram), usage: memoryPercent(sample.value?.ram), detail: live.value ? t("{0} disponibles", { 0: bytes(sample.value!.ram.available) }) : t('Memoria del equipo') },
   ...(sample.value?.gpus.length ? sample.value.gpus : [null]).flatMap((gpu, index) => [
-    { key: `gpu-${index}`, label: (sample.value?.gpus.length ?? 0) > 1 ? `GPU ${index + 1}` : 'GPU', icon: CircuitBoard, value: live.value ? percent(gpu?.percent) : '—', usage: live.value ? gpu?.percent ?? null : null, detail: gpu?.name || t('Uso gráfico no disponible en este equipo') },
-    ...(gpu ? [{ key: `vram-${index}`, label: 'VRAM', icon: MemoryStick, value: memoryLabel(gpu.memory), usage: memoryPercent(gpu.memory), detail: live.value ? t("{0} disponibles · {1}", { 0: bytes(gpu.memory.available), 1: gpu.name }) : t('Memoria gráfica') }] : [])
+    { key: `gpu-${index}`, componentName: gpu?.name || null, label: (sample.value?.gpus.length ?? 0) > 1 ? `GPU ${index + 1}` : 'GPU', icon: CircuitBoard, value: live.value ? percent(gpu?.percent) : '—', usage: live.value ? gpu?.percent ?? null : null, detail: gpu?.name || t('Uso gráfico no disponible en este equipo') },
+    ...(gpu ? [{ key: `vram-${index}`, componentName: null, label: 'VRAM', icon: MemoryStick, value: memoryLabel(gpu.memory), usage: memoryPercent(gpu.memory), detail: live.value ? t("{0} disponibles · {1}", { 0: bytes(gpu.memory.available), 1: gpu.name }) : t('Memoria gráfica') }] : [])
   ])
 ])
 async function update() {
@@ -49,6 +49,7 @@ onBeforeUnmount(() => { disposed = true; clearTimeout(timer); document.removeEve
     <div class="resource-rows">
       <div v-for="row in rows" :key="row.key" class="resource-row" :title="row.detail" :aria-label="`${row.label}: ${row.value}. ${row.detail}`">
         <div class="resource-reading"><span><component :is="row.icon" :size="12" aria-hidden="true"/>{{ row.label }}</span><span class="resource-value">{{ row.value }}</span><span class="resource-compact-value">{{ percent(row.usage) }}</span></div>
+        <small v-if="row.componentName" class="resource-component-name" :title="row.componentName">{{ row.componentName }}</small>
         <meter v-if="row.usage !== null" min="0" max="100" :value="row.usage" :aria-label="t('{0} en uso', { 0: row.label })"/>
         <div v-else class="resource-no-reading" aria-hidden="true"></div>
       </div>

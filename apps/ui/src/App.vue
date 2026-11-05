@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, onBeforeUnmount, ref, watch, nextTick } from 'vue'
 import { Sparkles, Monitor, Settings2, ChevronRight, ShieldCheck, LockKeyhole, Image as ImageIcon, Sun, Moon, Cpu, HardDrive, RefreshCw, ArrowRight, AlertTriangle, Info, Check, Wifi, Layers3, FolderOpen } from '@lucide/vue'
-import { eventSchema, type Settings, type Locale, type Hardware, type Engine, type CreationState, type PreparationPlan, type ImageJob, type VideoState, type VideoPlan, type VideoJob, type Catalog } from '@veltria/contracts'
+import { eventSchema, type Settings, type Locale, type Hardware, type Engine, type CreationState, type PreparationPlan, type ImageJob, type VideoState, type VideoPlan, type VideoJob, type Catalog, type SetupState } from '@veltria/contracts'
 import { bytes, t, date, locale, setLocale } from './i18n'
 import CreationStudio from './CreationStudio.vue'
 import ImageLibrary from './ImageLibrary.vue'
 import VideoStudio from './VideoStudio.vue'
 import VideoLibrary from './VideoLibrary.vue'
+import SetupWizard from './SetupWizard.vue'
 import ModelCatalog from './ModelCatalog.vue'
 import ResourceMonitor from './ResourceMonitor.vue'
 import { api } from './api'
@@ -16,6 +17,7 @@ const navigation = computed(() => [{ id: 'create', label: t(es.create), icon: Sp
 const view = ref<View>('create'), settings = ref<Settings>({ theme: 'system', locale: locale.value, engineUrl: null, engineBinding: null, modelsDirectory: null })
 const connected = ref(false), loading = ref(true), saving = ref(false), probing = ref(false), error = ref(''), notice = ref('')
 const hardware = ref<Hardware | null>(null), hardwareError = ref(''), hardwareBusy = ref(false), engine = ref<Engine | null>(null)
+const setupOpen = ref(false), setupState = ref<SetupState | null>(null)
 const catalog = ref<Catalog | null>(null)
 const creation = ref<CreationState | null>(null), plan = ref<PreparationPlan | null>(null), jobs = ref<ImageJob[]>([]), totalJobs = ref(0), operationBusy = ref(false)
 const mediaKind = ref<'image' | 'video'>('image'), videoState = ref<VideoState | null>(null), videoPlan = ref<VideoPlan | null>(null), videoJobs = ref<VideoJob[]>([]), totalVideos = ref(0), videoPrompt = ref(''), videoPreset = ref<'preview' | 'short'>('preview'), selectedVideoId = ref('')
@@ -37,10 +39,10 @@ async function refresh() {
   if (refreshPending) { refreshQueued = true; return }
   refreshPending = true
   try {
-    const [saved, motor, studio, library, movies, movieLibrary, modelCatalog] = await Promise.all([api.settings(), api.engine(), api.creation(), api.jobs(), api.video(), api.videos(), api.catalog()])
+    const [saved, motor, studio, library, movies, movieLibrary, modelCatalog, setup] = await Promise.all([api.settings(), api.engine(), api.creation(), api.jobs(), api.video(), api.videos(), api.catalog(), api.setup()])
     if (creation.value?.configuration.id !== studio.configuration.id) { format.value = studio.configuration.format; selectedJobId.value = ''; plan.value = null }
     settings.value = saved; engine.value = motor; creation.value = studio; totalJobs.value = library.total
-    catalog.value = modelCatalog; videoState.value = movies; totalVideos.value = movieLibrary.total
+    setupState.value = setup; catalog.value = modelCatalog; videoState.value = movies; totalVideos.value = movieLibrary.total
     videoJobs.value = [...movieLibrary.jobs, ...videoJobs.value.filter(job => !movieLibrary.jobs.some(incoming => incoming.id === job.id))]
     const older = jobs.value.filter(job => !library.jobs.some(incoming => incoming.id === job.id))
     jobs.value = [...library.jobs, ...older]
@@ -114,13 +116,19 @@ function selectConfiguration(id: string, prepare: boolean) { void operation(asyn
   selectedJobId.value = ''; plan.value = null
   try { sessionStorage.removeItem('veltria-pending-create') } catch {}
   mediaKind.value = 'image'; await navigate('create')
-  if (prepare) plan.value = await api.plan()
+  if (prepare) {
+    if (!creation.value.bound) { setupOpen.value = true; setupState.value = await api.scanSetup() }
+    else plan.value = await api.plan()
+  }
 }) }
 function importConfiguration(value: unknown) { void operation(async () => {
   await api.importConfiguration(value)
   notice.value = 'Configuración importada. Ya puedes elegirla junto a su modelo.'
 }) }
 function openVideo() { mediaKind.value = 'video'; void navigate('create') }
+function openSetup() { setupOpen.value = true; scanSetup() }
+function scanSetup(directory?: string) { void operation(async () => { setupState.value = await api.scanSetup(directory) }) }
+function prepareSetup(revision: string) { void operation(async () => { await api.prepareSetup(revision); setupOpen.value = false; mediaKind.value = 'image'; await navigate('create') }) }
 function reviewPlan() { void operation(async () => { plan.value = await api.plan() }) }
 function prepareProfile() { void operation(async () => { if (!plan.value) return; await api.prepare(plan.value.revision); plan.value = null }) }
 function resumeProfile() { void operation(async () => { const current = await api.plan(); if (current.canPrepare && current.revision === creation.value?.preparation.revision) await api.prepare(current.revision); else plan.value = current }) }
@@ -178,7 +186,7 @@ onBeforeUnmount(() => { destroyed = true; stream?.close(); media?.removeEventLis
       <a class="brand" href="#" @click.prevent="navigate('create')" :aria-label="t('Veltria, ir a crear')"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M2 6h7l7 14 5-10h-6l2-4h12L17 29z" fill="currentColor"/></svg><span>VELTRIA</span><span class="brand-dot"></span></a>
       <div class="workspace-label">{{ t('TU ESPACIO CREATIVO') }}</div>
       <nav :aria-label="t('Principal')"><button v-for="item in navigation" :key="item.id" :class="['nav-item', { active: view === item.id }]" :aria-label="item.label" :aria-current="view === item.id ? 'page' : undefined" @click="navigate(item.id)"><component :is="item.icon" :size="19"/><span>{{ item.label }}</span><ChevronRight v-if="view === item.id" :size="14" class="nav-arrow"/></button></nav>
-      <div class="sidebar-bottom"><ResourceMonitor :connected="connected"/><div class="sidebar-footer"><span class="version">VELTRIA <span>{{ t('0.4 / CATÁLOGO LOCAL') }}</span></span><button class="icon-button" :disabled="saving" :aria-label="isDark ? t('Cambiar a modo claro') : t('Cambiar a modo oscuro')" @click="changeTheme(isDark ? 'light' : 'dark')"><Sun v-if="isDark" :size="19"/><Moon v-else :size="19"/></button></div></div>
+      <div class="sidebar-bottom"><ResourceMonitor :connected="connected" :cpu-name="hardware?.cpu.name"/><div class="sidebar-footer"><span class="version">VELTRIA <span>{{ t('0.5 / PREPARACIÓN LOCAL') }}</span></span><button class="icon-button" :disabled="saving" :aria-label="isDark ? t('Cambiar a modo claro') : t('Cambiar a modo oscuro')" @click="changeTheme(isDark ? 'light' : 'dark')"><Sun v-if="isDark" :size="19"/><Moon v-else :size="19"/></button></div></div>
     </aside>
     <div class="main-shell">
       <header class="topbar"><a class="mobile-brand" href="#" @click.prevent="navigate('create')"><span>VELTRIA</span></a><div class="breadcrumb">{{ t('Estudio') }} <ChevronRight :size="13"/><span>{{ heading }}</span></div><div class="topbar-right"><span class="local-note"><ShieldCheck :size="15"/>{{ t(connected ? es.connected : es.disconnected) }}</span><button class="icon-button mobile-theme-switch" :disabled="saving" :aria-label="isDark ? t('Cambiar a modo claro') : t('Cambiar a modo oscuro')" @click="changeTheme(isDark ? 'light' : 'dark')"><Sun v-if="isDark" :size="19"/><Moon v-else :size="19"/></button></div></header>
@@ -186,7 +194,7 @@ onBeforeUnmount(() => { destroyed = true; stream?.close(); media?.removeEventLis
       <p v-if="notice" class="service-notice" role="status">{{ t(notice) }}</p>
       <main id="content">
         <div v-if="view === 'create' || view === 'library'" class="media-tabs" role="group" :aria-label="t('Tipo de contenido')"><button :class="{ selected: mediaKind === 'image' }" :aria-pressed="mediaKind === 'image'" @click="mediaKind = 'image'">{{ t('Imágenes') }}</button><button :class="{ selected: mediaKind === 'video' }" :aria-pressed="mediaKind === 'video'" @click="mediaKind = 'video'">{{ t('Video') }}</button></div>
-        <CreationStudio v-if="view === 'create' && mediaKind === 'image'" v-model:prompt="prompt" v-model:format="format" :state="creation" :plan="plan" :job="selectedJob" :connected="connected" :busy="operationBusy" :error="error" @plan="reviewPlan" @prepare="prepareProfile" @resume="resumeProfile" @pause="pauseProfile" @create="generate" @cancel="cancelJob" @reconcile="reconcileJob" @close-plan="plan = null" @models-directory="changeModelsDirectory" @device="navigate('device')" @models="navigate('models')"/>
+        <CreationStudio v-if="view === 'create' && mediaKind === 'image'" v-model:prompt="prompt" v-model:format="format" :state="creation" :plan="plan" :job="selectedJob" :connected="connected" :busy="operationBusy" :error="error" @plan="reviewPlan" @prepare="prepareProfile" @resume="resumeProfile" @pause="pauseProfile" @create="generate" @cancel="cancelJob" @reconcile="reconcileJob" @close-plan="plan = null" @models-directory="changeModelsDirectory" @device="navigate('device')" @models="navigate('models')" @setup="openSetup"/>
         <VideoStudio v-else-if="view === 'create'" v-model:prompt="videoPrompt" v-model:preset="videoPreset" :state="videoState" :plan="videoPlan" :job="selectedVideo" :connected="connected" :busy="operationBusy" :error="error" @plan="reviewVideoPlan" @prepare="prepareVideo" @pause="pauseVideo" @create="generateVideo" @cancel="cancelVideo" @reconcile="reconcileVideo" @close-plan="videoPlan = null" @device="navigate('device')"/>
         <ImageLibrary v-else-if="view === 'library' && mediaKind === 'image'" :jobs="jobs" :total="totalJobs" :busy="operationBusy" @reuse="reuse" @more="moreJobs" @create="navigate('create')"/>
         <VideoLibrary v-else-if="view === 'library'" :jobs="videoJobs" :total="totalVideos" :busy="operationBusy" @reuse="reuseVideo" @more="moreVideos" @create="navigate('create')"/>
@@ -200,7 +208,7 @@ onBeforeUnmount(() => { destroyed = true; stream?.close(); media?.removeEventLis
             <dl class="hardware-list"><div><dt><Cpu :size="18"/>{{ t('Procesador') }}</dt><dd>{{ hardware.cpu.name || t(es.unknown) }}<small>{{ hardware.cpu.logicalCores }} {{ t('procesadores lógicos ·') }} {{ t(hardware.cpu.source) }}</small></dd></div><div><dt>{{ t('Memoria RAM') }}</dt><dd>{{ bytes(hardware.ram.total) }} total · {{ bytes(hardware.ram.available) }} {{ t('disponible') }}<small>{{ t(hardware.ram.source) }}</small></dd></div><div><dt><HardDrive :size="18"/>{{ t('Disco de datos') }}</dt><dd>{{ bytes(hardware.disk.total) }} total · {{ bytes(hardware.disk.available) }} {{ t('disponible') }}<small>{{ hardware.disk.path }} · {{ t(hardware.disk.source) }}</small></dd></div><div v-for="(gpu, index) in hardware.gpus" :key="index"><dt>GPU {{ index + 1 }}</dt><dd>{{ gpu.name }}<small>VRAM: {{ bytes(gpu.vramTotal) }} total · {{ bytes(gpu.vramAvailable) }} {{ t('libre · Controlador:') }} {{ gpu.driver || t(es.unknown) }}<br>{{ t(gpu.source) }}</small></dd></div><div v-if="!hardware.gpus.length"><dt>GPU</dt><dd>{{ t('Desconocida') }}<small>{{ t('No se pudo obtener un inventario fiable.') }}</small></dd></div></dl>
             <details class="measurement-details"><summary>{{ t('Fuentes y límites de esta medición') }}</summary><p v-for="note in hardware.notes" :key="note">{{ t(note) }}</p><p>{{ t('Medido:') }} {{ date(hardware.sampledAt) }}</p></details>
           </template>
-          <section class="setup-card real-setup"><div><h2>{{ t('Tu primera imagen') }}</h2><p>{{ t('Reutiliza el motor vinculado y prepara un perfil completo con descarga y verificación, desde Crear. La instalación de motores nuevos permanece pendiente.') }}</p></div><button class="primary-button" @click="navigate('create')">{{ t('Ir a crear') }}</button></section>
+          <section class="setup-card real-setup"><div><h2>{{ t('Preparar mi equipo') }}</h2><p>{{ t('Veltria puede encontrar una instalación existente y preparar lo necesario para crear, sin pedirte rutas de Python.') }}</p></div><button class="primary-button" :disabled="!connected || operationBusy" @click="openSetup">{{ t('Revisar mi equipo') }}</button></section>
           <details class="settings-card advanced-connection"><summary>{{ t('Avanzado · Usar una instalación existente de ComfyUI') }}</summary><p>{{ t('Comprobación técnica local. Guarda la dirección y consulta capacidades sin modificar su instalación. No es la incorporación final para principiantes.') }}</p><form @submit.prevent="saveEngine()"><label for="engine-address">{{ t('Dirección local de ComfyUI') }}</label><input id="engine-address" v-model="engineAddress" type="text" class="text-input" maxlength="200" inputmode="url" :disabled="!connected || probing || saving" aria-describedby="engine-hint" @input="engineDirty = true"><p id="engine-hint">{{ t('Sólo HTTP en 127.0.0.1, localhost o [::1]. Por ejemplo, http://127.0.0.1:8188.') }}</p><div class="action-row"><button type="submit" class="secondary-button" :disabled="!connected || saving || probing">{{ t('Guardar dirección') }}</button><button type="button" class="primary-button" :disabled="!connected || !settings.engineUrl || engineDirty || saving || probing || engine?.status === 'checking'" @click="checkEngine">{{ probing || engine?.status === 'checking' ? t('Comprobando…') : t('Comprobar conexión') }}</button><button v-if="settings.engineUrl" type="button" class="text-button" :disabled="!connected || saving || probing" @click="saveEngine(true)">{{ t('Retirar conexión') }}</button></div></form><section aria-live="polite"><h3>{{ status }}</h3><p>{{ t(engine?.message || '') }}</p><template v-if="engine?.status === 'ready'"><p>{{ engine.nodeCount }} {{ t('tipos de nodo · Versión:') }} {{ engine.version || t('No informada') }}</p><p>{{ t('Dispositivos del motor:') }} {{ engine.devices.join(', ') || t('No informados') }}</p><details><summary>{{ t('Modelos declarados por ComfyUI (') }}{{ engine.models.length }})</summary><ul><li v-for="model in engine.models" :key="model">{{ model }}</li></ul><p v-if="!engine.models.length">{{ t('No se declararon modelos en los cargadores consultados.') }}</p></details></template><p v-if="engine?.checkedAt" class="small-note">{{ t('Última comprobación:') }} {{ date(engine.checkedAt) }}{{ t('. No es una monitorización continua.') }}</p></section></details>
           <details class="settings-card advanced-connection"><summary>{{ t('Avanzado · Vincular la instalación para crear') }}</summary><p>{{ t('Veltria reutiliza el Python y el motor que ya tienes. Durante la preparación abrirá un proceso local con carpetas propias; no actualizará la instalación ni ejecutará sus nodos personalizados.') }}</p><form @submit.prevent="saveBinding"><label for="binding-directory">{{ t('Carpeta de ComfyUI (contiene main.py)') }}</label><input id="binding-directory" v-model="bindingDirectory" type="text" class="text-input" maxlength="1000" @input="bindingDirty = true"><label for="binding-python">{{ t('Python existente del motor') }}</label><input id="binding-python" v-model="bindingPython" type="text" class="text-input" maxlength="1000" @input="bindingDirty = true"><button class="secondary-button" :disabled="!connected || operationBusy || !bindingDirectory.trim() || !bindingPython.trim()">{{ t('Vincular esta instalación') }}</button></form><p v-if="settings.engineBinding">{{ t('Instalación vinculada. Ya puedes revisar la preparación desde Crear.') }}</p></details>
         </template>
@@ -212,8 +220,9 @@ onBeforeUnmount(() => { destroyed = true; stream?.close(); media?.removeEventLis
           <section class="settings-card"><h2>{{ t('Tu espacio creativo') }}</h2><p>{{ t('Incluye imagen y video local con perfiles revisados. Instalación de motores, imagen a video y edición siguen pendientes.') }}</p></section>
         </template>
       </main>
-      <footer class="prototype-bar"><span><ShieldCheck :size="14"/>{{ connected ? t('Servicio autorizado · sólo este equipo') : t('Sin conexión al servicio') }}</span><span>{{ t('Veltria 0.4 · Creación local') }}</span></footer>
+      <footer class="prototype-bar"><span><ShieldCheck :size="14"/>{{ connected ? t('Servicio autorizado · sólo este equipo') : t('Sin conexión al servicio') }}</span><span>{{ t('Veltria 0.5 · Creación local') }}</span></footer>
     </div>
+    <SetupWizard v-if="setupOpen" :state="setupState" :connected="connected" :busy="operationBusy" :error="error" @close="setupOpen = false" @scan="scanSetup" @prepare="prepareSetup"/>
     <div class="mobile-dock"><nav class="mobile-nav" :aria-label="t('Navegación móvil')"><button v-for="item in navigation" :key="item.id" :class="{ active: view === item.id }" :aria-label="item.label" :aria-current="view === item.id ? 'page' : undefined" @click="navigate(item.id)"><component :is="item.icon" :size="21"/><span>{{ item.label }}</span></button></nav></div>
   </div>
 </template>

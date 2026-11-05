@@ -1,6 +1,6 @@
 # Veltria — decisiones vigentes
 
-Actualizado el 3 de noviembre de 2026. Nombre provisional: Veltria. Identificador técnico: veltria. Dirección visual: Obsidian, con temas oscuro, claro y sistema.
+Actualizado el 5 de noviembre de 2026. Nombre provisional: Veltria. Identificador técnico: veltria. Dirección visual: Obsidian, con temas oscuro, claro y sistema.
 
 ## Filosofía obligatoria
 
@@ -49,6 +49,8 @@ Recomendaciones locales mediante reglas y mediciones; no requieren un LLM. Estad
 ## Motores y descargas
 
 ComfyUI local es el primer motor. Empezar conectando una instalación existente sin mover archivos o cambiar su entorno. Instalar y administrar una instancia propia en el hito 3 como ruta normal para principiantes; la conexión externa no sustituye este requisito de producto. No exigir otros gestores como intermediarios.
+
+La preparación inicial puede localizar y reutilizar una instalación existente sin pedir rutas de Python. La búsqueda sólo lee ubicaciones acotadas; muestra propuesta, recursos, descarga, licencia y cambios antes de autorizar. Distinguir archivos localizados, arranque comprobado y generación verificada. El selector nativo de carpetas es una integración mínima de Electron; las reglas y búsquedas permanecen en el servicio compartido.
 
 Cada receta declara workflow API, componentes, versiones, entradas y extensiones necesarias. La preparación la resuelve el servicio como una operación persistida: plan previo, autorización del conjunto, ejecución, comprobación y recuperación. Un archivo descargado no equivale a una tarea preparada o verificada. Los LoRA requieren relación con familia/modelo/receta y estado de compatibilidad; no son archivos intercambiables por estar en la misma carpeta. No prometer compatibilidad con cualquier workflow ni conversión universal entre motores. Cancelar sólo trabajo propio, especialmente con motores compartidos.
 

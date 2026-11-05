@@ -1,3 +1,5 @@
+> Registro de la entrega 0.4. La comprobación posterior de DreamShaper y las configuraciones se documenta en [validación real del catálogo 0.5.1](catalog-real-validation.md).
+
 # Catálogo local · Veltria 0.4
 
 La navegación **Modelos → elegir configuración → revisar descarga → preparar → Crear** funciona en la misma UI de navegador y Electron. El servicio Bun/Fastify es la autoridad: catálogo incluido para consulta offline, SQLite para selección/configuraciones/recibos y archivos de pesos fuera de SQLite. No se instala otro ComfyUI.

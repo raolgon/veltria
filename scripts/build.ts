@@ -11,7 +11,7 @@ await run([resolve('apps/ui/node_modules/vite/bin/vite.js'), 'build', '--config'
 await mkdir('build/service', { recursive: true })
 await run(['build', '--compile', `--target=${target}`, './apps/local-service/src/index.ts', '--outfile', `build/service/veltria-service${target.includes('windows') ? '.exe' : ''}`])
 const extension = target.includes('windows') ? '.exe' : ''
-const browserDirectory = 'build/browser/0.4.0'
+const browserDirectory = `build/browser/${(await Bun.file('package.json').json()).version}`
 await mkdir(`${browserDirectory}/resources/service`, { recursive: true })
 await run(['build', '--compile', `--target=${target}`, './scripts/web-launcher.ts', '--outfile', `${browserDirectory}/veltria-web${extension}`])
 await cp(`build/service/veltria-service${extension}`, `${browserDirectory}/resources/service/veltria-service${extension}`)

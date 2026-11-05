@@ -1,4 +1,4 @@
-> Entrega actual: [Veltria 0.4, catálogo de modelos y configuraciones](model-catalog.md). [Video experimental de 0.3](video-validation.md). Se conservan debajo las comprobaciones históricas del hito 1.
+> Entrega actual: [Veltria 0.5.1, catálogo y validación real](catalog-real-validation.md). [Preparación automática de 0.5](automatic-setup.md). [Catálogo de 0.4](model-catalog.md). [Video experimental de 0.3](video-validation.md). Se conservan debajo las comprobaciones históricas del hito 1.
 
 # Estado de Veltria · hito 1
 

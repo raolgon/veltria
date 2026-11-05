@@ -80,9 +80,11 @@ export class CreationFixture {
     const root = join(directory, 'existing engine fixture'); await mkdir(join(root, 'comfy'), { recursive: true })
     await writeFile(join(root, 'main.py'), '# fixture; never executed')
     await writeFile(join(root, 'folder_paths.py'), '# fixture')
+    await writeFile(join(root, 'server.py'), '# /api/jobs/{job_id}/cancel interrupt_if_running')
     await writeFile(join(root, 'comfyui_version.py'), '__version__ = "fixture"')
     await writeFile(join(root, 'comfy', 'cli_args.py'), '--extra-model-paths-config --user-directory --disable-all-custom-nodes --database-url')
-    const python = join(root, process.platform === 'win32' ? 'python.exe' : 'python'); await writeFile(python, '')
+    const env = join(root, 'env', process.platform === 'win32' ? 'Scripts' : 'bin'); await mkdir(env, { recursive: true })
+    const python = join(env, process.platform === 'win32' ? 'python.exe' : 'python'); await writeFile(python, process.platform === 'win32' ? Buffer.from('MZfixture') : Buffer.from('7f454c46', 'hex'), { mode: 0o700 })
     return { directory: root, python }
   }
   stop() { this.server.stop(true) }
