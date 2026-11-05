@@ -3,7 +3,7 @@ import { join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import assert from 'node:assert/strict'
 import { launchService } from './supervisor'
-import { engineSchema, hardwareSchema, healthSchema, resourcesSchema, videoStateSchema, catalogSchema } from '@veltria/contracts'
+import { engineSchema, hardwareSchema, healthSchema, resourcesSchema, videoStateSchema, catalogSchema, setupStateSchema } from '@veltria/contracts'
 
 const temp = await mkdtemp(join(tmpdir(), 'Veltria integration with spaces '))
 let fixtureMode = 'valid', checks = 0
@@ -31,6 +31,7 @@ try {
       assert.equal((await res('/settings')).status, 401); checks++
       assert.equal((await res('/resources')).status, 401); checks++
       assert.equal((await res('/catalog')).status, 401); checks++
+      assert.equal((await res('/setup')).status, 401); checks++
       assert.equal((await res('/video/jobs')).status, 401); checks++
       assert.equal((await res('/identity', { headers: { host: 'evil.example' } })).status, 403); checks++
       assert.equal((await res('/identity', { headers: { origin: 'https://evil.example' } })).status, 403); checks++
@@ -53,6 +54,10 @@ try {
       assert.equal((await res('/settings', { method: 'PATCH', headers, body: JSON.stringify({ huge: 'x'.repeat(50000) }) })).status, 413); checks++
       const health = healthSchema.parse(await (await res('/health', { headers })).json())
       assert.equal(health.capabilities.generation, true); assert.equal(health.capabilities.video, true); assert.match(health.runtime, /Bun/); checks++
+      const setup = setupStateSchema.parse(await (await res('/setup', { headers })).json())
+      assert.equal(setup.status, 'idle'); checks++
+      assert.equal((await res('/setup/scan', { method: 'POST', headers, body: JSON.stringify({ directory: 'relative/path' }) })).status, 400); checks++
+      assert.equal((await res('/setup/prepare', { method: 'POST', headers, body: JSON.stringify({ revision: 'a'.repeat(64), acceptLicense: true, acceptReuse: false }) })).status, 400); checks++
       const catalog = catalogSchema.parse(await (await res('/catalog', { headers })).json())
       assert.equal(catalog.models.length, 2); assert.equal(catalog.configurations.length, 6); checks++
       const exportedConfiguration = await res(`/catalog/configurations/${catalog.selectedConfigurationId}`, { headers })

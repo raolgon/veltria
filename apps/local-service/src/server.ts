@@ -4,20 +4,21 @@ import staticFiles from '@fastify/static'
 import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { ServerResponse } from 'node:http'
 import { z } from 'zod'
-import { protocol, settingsPatchSchema, sessionSchema, healthSchema, engineSchema, createImageSchema, prepareRequestSchema, creationStateSchema, preparationSchema, jobSchema, librarySchema, prepareVideoSchema, createVideoSchema, videoJobSchema, catalogSchema, catalogSelectionSchema, imageConfigurationSchema } from '@veltria/contracts'
+import { protocol, settingsPatchSchema, sessionSchema, healthSchema, engineSchema, createImageSchema, prepareRequestSchema, creationStateSchema, preparationSchema, jobSchema, librarySchema, prepareVideoSchema, createVideoSchema, videoJobSchema, catalogSchema, catalogSelectionSchema, imageConfigurationSchema, setupScanSchema, setupPlanRequestSchema, setupPrepareSchema, setupStateSchema, setupPlanSchema } from '@veltria/contracts'
 import { SettingsRepository, detectHardware, probeComfy, initialEngine, ResourceMonitor } from '@veltria/adapters'
 import { join, isAbsolute } from 'node:path'
 import { createReadStream } from 'node:fs'
 import { validateEngineBinding } from '../../../packages/adapters/src/image-engine'
 import { CreationController, CreationError } from './creation'
 import { VideoController, type VideoOptions } from './video'
+import { SetupController, type SetupOptions } from './setup'
 import { mkdir, stat, writeFile } from 'node:fs/promises'
 
 export const secret = () => randomBytes(32).toString('hex')
 function equal(a: unknown, b: string): boolean {
   return typeof a === 'string' && Buffer.byteLength(a) === Buffer.byteLength(b) && timingSafeEqual(Buffer.from(a), Buffer.from(b))
 }
-type Options = { dataDir: string; uiDir: string; controlToken: string; instanceId: string; devOrigin?: string; onShutdown?: () => void; creation?: Pick<ConstructorParameters<typeof CreationController>[0], 'profile' | 'profiles' | 'hardware' | 'disk' | 'engine' | 'allowLocalFixture'>; video?: Pick<VideoOptions, 'hardware' | 'components' | 'probe' | 'engine' | 'disk'> }
+type Options = { dataDir: string; uiDir: string; controlToken: string; instanceId: string; devOrigin?: string; onShutdown?: () => void; creation?: Pick<ConstructorParameters<typeof CreationController>[0], 'profile' | 'profiles' | 'hardware' | 'disk' | 'engine' | 'allowLocalFixture'>; setup?: Pick<SetupOptions, 'discover'>; video?: Pick<VideoOptions, 'hardware' | 'components' | 'probe' | 'engine' | 'disk'> }
 export async function createServer(options: Options) {
   const app = Fastify({ logger: false, bodyLimit: 32768, requestTimeout: 10_000, connectionTimeout: 10_000, keepAliveTimeout: 5000 })
   const database = join(options.dataDir, 'settings.sqlite'), existed = await stat(database).then(() => true).catch(() => false)
@@ -39,7 +40,7 @@ export async function createServer(options: Options) {
     if (nonces.size >= 32) throw new Error('Demasiados lanzamientos pendientes; espera un minuto.')
     const nonce = secret(); nonces.set(nonce, now + 60_000); return nonce
   }
-  function emit(kind: 'settings' | 'engine' | 'creation' | 'jobs' | 'video') {
+  function emit(kind: 'settings' | 'engine' | 'creation' | 'jobs' | 'video' | 'setup') {
     const payload = `id: ${++sequence}\ndata: ${JSON.stringify({ sequence, kind, instanceId: options.instanceId })}\n\n`
     for (const [stream, expires] of streams) {
       if (expires <= Date.now() || stream.writableLength > 64_000) stream.end()
@@ -48,6 +49,7 @@ export async function createServer(options: Options) {
   }
   const creation = new CreationController({ ...options.creation, dataDir: options.dataDir, repository, changed: emit })
   const video = new VideoController({ ...options.video, dataDir: options.dataDir, repository, changed: () => emit('video') })
+  const setup = new SetupController({ ...options.setup, settings: () => repository.get(), creation, changed: () => emit('setup') })
   // Serialize ownership changes, including requests from separate browser/desktop clients.
   let gpuAction: Promise<unknown> = Promise.resolve()
   function serialized<T>(work: () => Promise<T>): Promise<T> { const run = gpuAction.then(work); gpuAction = run.catch(() => {}); return run }
@@ -109,7 +111,7 @@ export async function createServer(options: Options) {
     return sessionSchema.parse({ csrf: session.csrf, settings: repository.get() })
   })
   app.get('/api/v1/session', async (request) => sessionSchema.parse({ csrf: sessions.get(request.cookies.veltria_session!)!.csrf, settings: repository.get() }))
-  app.get('/api/v1/health', async () => healthSchema.parse({ ...identity, version: '0.4.0', runtime: `Bun ${Bun.version}`, capabilities: { hardware: true, engineProbe: true, generation: true, preparation: true, video: true, lan: false } }))
+  app.get('/api/v1/health', async () => healthSchema.parse({ ...identity, version: '0.5.0', runtime: `Bun ${Bun.version}`, capabilities: { hardware: true, engineProbe: true, generation: true, preparation: true, video: true, lan: false } }))
   app.get('/api/v1/activity', async () => { const image = creation.activity(), movie = video.activity(); return { preparing: image.preparing || movie.preparing, jobs: image.jobs + movie.jobs } })
   app.get('/api/v1/settings', async () => repository.get())
   app.patch('/api/v1/settings', async request => serialized(async () => {
@@ -129,6 +131,22 @@ export async function createServer(options: Options) {
     if ('engineBinding' in patch || 'modelsDirectory' in patch) { await creation.configurationChanged(); await video.configurationChanged() }
     if ('engineUrl' in patch) { engine = initialEngine(settings.engineUrl); emit('engine') }
     emit('settings'); return settings
+  }))
+  app.get('/api/v1/setup', async () => setupStateSchema.parse(setup.state()))
+  app.post('/api/v1/setup/scan', async (request, reply) => { const input = setupScanSchema.parse(request.body); reply.code(202); return setupStateSchema.parse(setup.scan(input.directory)) })
+  app.post('/api/v1/setup/plan', async request => { const input = setupPlanRequestSchema.parse(request.body); return setupPlanSchema.parse(await setup.plan(input.scanId, input.installationId)) })
+  app.post('/api/v1/setup/prepare', async (request, reply) => serialized(async () => {
+    const input = setupPrepareSchema.parse(request.body)
+    creation.assertConfigurationMutable(); video.assertMutable()
+    const proposal = await setup.review(input.revision)
+    await video.releaseEngine()
+    const binding = { directory: proposal.installation.directory, python: proposal.installation.python! }
+    if (JSON.stringify(repository.get().engineBinding) !== JSON.stringify(binding)) {
+      repository.update({ engineBinding: binding })
+      await creation.configurationChanged(); await video.configurationChanged(); emit('settings')
+    }
+    reply.code(202)
+    return creation.prepare(proposal.preparation.revision)
   }))
   app.get('/api/v1/catalog', async () => catalogSchema.parse(await creation.catalog()))
   app.post('/api/v1/catalog/select', async request => serialized(async () => {
@@ -227,7 +245,7 @@ export async function createServer(options: Options) {
     async close() {
       if (closing) return
       closing = true; engineAbort.abort()
-      await Promise.all([creation.close(), video.close()])
+      await Promise.all([setup.close(), creation.close(), video.close()])
       for (const stream of streams.keys()) stream.end()
       streams.clear()
       await app.close()

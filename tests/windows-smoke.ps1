@@ -24,7 +24,7 @@ function Start-Veltria {
   if (-not $read.Wait(15000)) { throw 'Timeout de arranque Windows' }
   if (-not $read.Result) { throw ('No hubo respuesta: ' + $p.StandardError.ReadToEnd()) }
   $script:ready = $read.Result | ConvertFrom-Json
-  if ($ready.name -ne 'veltria' -or $ready.protocol -ne 5 -or $ready.origin -notmatch '^http://127\.0\.0\.1:\d+$') { throw 'Identidad incorrecta' }
+  if ($ready.name -ne 'veltria' -or $ready.protocol -ne 6 -or $ready.origin -notmatch '^http://127\.0\.0\.1:\d+$') { throw 'Identidad incorrecta' }
   $script:origin = $ready.origin
   $response = Invoke-WebRequest -UseBasicParsing -Uri "$origin/api/v1/session" -Method POST -ContentType 'application/json' -Headers @{Origin=$origin} -Body (@{nonce=$ready.nonce} | ConvertTo-Json) -SessionVariable localSession
   $script:session = $localSession

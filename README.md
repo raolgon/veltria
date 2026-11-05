@@ -1,6 +1,8 @@
 # Veltria — web local y Electron
 
-## Versión actual: 0.4 · modelos y configuraciones en la app
+## Versión actual: 0.5 · preparación inicial automática
+
+**Crear → Preparar mi equipo** busca y propone reutilizar tu ComfyUI existente, sin pedir una ruta de Python. Revisa la descarga, el espacio y los cambios, autoriza la preparación y crea cuando termine. Si no lo encuentra, puedes elegir una carpeta. La búsqueda sólo lee archivos; no instala otro motor ni modifica tus modelos.
 
 **Modelos** permite elegir SD 1.5 o DreamShaper 8, revisar la descarga y preparar el modelo para usarlo en **Crear**. Hay configuraciones equilibrada, borrador y más pasos por modelo, exportación/importación de JSON de Veltria y selección persistente. Se conservan las descargas parciales al cambiar de modelo; cambiar sólo ajustes no vuelve a descargar los pesos.
 
@@ -12,21 +14,21 @@ Abrir en Windows PowerShell, después de cerrar la versión anterior:
 
 ```powershell
 Set-Location 'C:\Users\rafao\Downloads\veltria-codex\veltria'
-.\release\0.4.0\win-unpacked\Veltria.exe
+.\release\0.5.0\win-unpacked\Veltria.exe
 # Navegador:
-.\build\browser\0.4.0\veltria-web.exe
+.\build\browser\0.5.0\veltria-web.exe
 ```
 
 Linux / WSL con pantalla:
 
 ```bash
 cd '/mnt/c/Users/rafao/Downloads/veltria-codex/veltria'
-./release/0.4.0/linux-unpacked/veltria
+./release/0.5.0/linux-unpacked/veltria
 # Navegador:
-./build/browser/0.4.0/veltria-web
+./build/browser/0.5.0/veltria-web
 ```
 
-El lanzador web imprime el enlace autorizado. Conservar los ejecutables con sus recursos. El paquete usa **protocolo 5** y SQLite de trabajos **esquema 4**; conserva imagen, preferencias y biblioteca, y crea una copia antes de actualizar datos anteriores. No adjuntarse a servicios anteriores ni compartir SQLite entre Windows y Linux. Las entregas anteriores se conservaron en sus carpetas.
+El lanzador web imprime el enlace autorizado. Conservar los ejecutables con sus recursos. El paquete usa **protocolo 6** y SQLite de trabajos **esquema 4**; conserva imagen, preferencias y biblioteca, y crea una copia antes de actualizar datos anteriores. No adjuntarse a servicios anteriores ni compartir SQLite entre Windows y Linux. Las entregas anteriores se conservaron en sus carpetas.
 
 Desarrollo con Bun 1.4.4 y Node 24.13.0:
 
@@ -42,7 +44,7 @@ bun run start:desktop
 
 `bun run dev` usa Vite 43120 y el proxy a Bun 43121. El servicio contiene toda la lógica y SQLite; Electron conserva su Node y sólo administra ventana, supervisor y diálogos. La UI es compartida y sigue Obsidian. No hay LAN, nube, LLM para reescribir descripciones ni instalación de motores. Los modelos del catálogo se descargan únicamente después de revisar y autorizar su plan. La descarga de los componentes H3 y la importación de workflows arbitrarios siguen pendientes.
 
-[Catálogo: modelos, configuraciones y validación](docs/model-catalog.md) · [Video: receta, componentes, pruebas, comandos y límites](docs/video-validation.md) · [primera imagen real](docs/first-image-validation.md) · [idiomas](docs/languages.md) · [recursos](docs/resources.md).
+[Preparación automática: búsqueda, pruebas y límites](docs/automatic-setup.md) · [Catálogo: modelos, configuraciones y validación](docs/model-catalog.md) · [Video: receta, componentes, pruebas, comandos y límites](docs/video-validation.md) · [primera imagen real](docs/first-image-validation.md) · [idiomas](docs/languages.md) · [recursos](docs/resources.md).
 
 ---
 

@@ -4,7 +4,8 @@ export * from './creation'
 export * from './resources'
 export * from './video'
 export * from './catalog'
-export const protocol = 5 as const
+export * from './setup'
+export const protocol = 6 as const
 export const development = { uiOrigin: 'http://127.0.0.1:43120', serviceOrigin: 'http://127.0.0.1:43121' } as const
 export const themeSchema = z.enum(['system', 'light', 'dark'])
 export const localeSchema = z.enum(['es', 'en'])
@@ -43,5 +44,5 @@ export const engineSchema = z.object({
 })
 export type Engine = z.infer<typeof engineSchema>
 export const readySchema = z.object({ name: z.literal('veltria'), protocol: z.literal(protocol), instanceId: z.string(), origin: z.string().url(), nonce: z.string().min(32) }).strict()
-export const eventSchema = z.object({ sequence: z.number(), kind: z.enum(['connected', 'settings', 'engine', 'creation', 'jobs', 'video']), instanceId: z.string() })
+export const eventSchema = z.object({ sequence: z.number(), kind: z.enum(['connected', 'settings', 'engine', 'creation', 'jobs', 'video', 'setup']), instanceId: z.string() })
 export const errorSchema = z.object({ error: z.string(), message: z.string() })

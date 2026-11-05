@@ -5,15 +5,16 @@ import type { CreationState, PreparationPlan, ImageJob } from '@veltria/contract
 import { bytes, t, date } from './i18n'
 import IdeaArt from './IdeaArt.vue'
 const props = defineProps<{ state: CreationState | null; plan: PreparationPlan | null; job: ImageJob | null; prompt: string; format: 'square' | 'landscape' | 'portrait'; connected: boolean; busy: boolean; error: string }>()
-const emit = defineEmits<{ 'update:prompt': [value: string]; 'update:format': [value: 'square' | 'landscape' | 'portrait']; plan: []; prepare: []; resume: []; pause: []; create: []; cancel: [id: string]; reconcile: [id: string]; closePlan: []; modelsDirectory: [path: string]; device: []; models: [] }>()
+const emit = defineEmits<{ 'update:prompt': [value: string]; 'update:format': [value: 'square' | 'landscape' | 'portrait']; plan: []; prepare: []; resume: []; pause: []; create: []; cancel: [id: string]; reconcile: [id: string]; closePlan: []; modelsDirectory: [path: string]; device: []; models: []; setup: [] }>()
 const dialog = ref<HTMLDialogElement | null>(null), consent = ref(false), location = ref('')
 const preparing = computed(() => !!props.state && ['downloading', 'verifying', 'starting'].includes(props.state.preparation.status))
 const activeJob = computed(() => !!props.job && ['queued', 'submitting', 'running', 'saving'].includes(props.job.status))
 const image = computed(() => props.job?.imageId ? `/api/v1/artifacts/${props.job.imageId}` : null)
 const canCreate = computed(() => props.connected && props.state?.canCreate && !preparing.value && !props.busy && !activeJob.value && !!props.prompt.trim())
-const mainLabel = computed(() => activeJob.value ? t('Creación en curso') : preparing.value ? t('Preparando tu perfil…') : props.state?.canCreate ? t('Crear imagen') : ['paused', 'error'].includes(props.state?.preparation.status || '') ? t('Continuar preparación') : t('Preparar para crear'))
+const mainLabel = computed(() => activeJob.value ? t('Creación en curso') : preparing.value ? t('Preparando tu perfil…') : props.state?.canCreate ? t('Crear imagen') : !props.state?.bound ? t('Preparar mi equipo') : ['paused', 'error'].includes(props.state?.preparation.status || '') ? t('Continuar preparación') : t('Preparar para crear'))
 function action() {
-  if (props.state?.canCreate) emit('create')
+  if (!props.state?.bound) emit('setup')
+  else if (props.state?.canCreate) emit('create')
   else if (['paused', 'error'].includes(props.state?.preparation.status || '') && props.state?.preparation.revision) emit('resume')
   else emit('plan')
 }
@@ -41,7 +42,7 @@ watch(() => props.plan, async plan => {
         <div class="profile-card"><span class="profile-emblem"><Monitor :size="24"/></span><div><span class="recommendation">{{ state.recommendation.verified ? t('Comprobado en este equipo') : state.recommendation.level === 'recommended' ? t('Recomendado para empezar') : t('Compatibilidad por revisar') }}</span><strong>{{ t(state.profile.title) }}</strong></div></div>
         <p class="helper configuration-summary">{{ state.configuration.origin === 'included' ? t(state.configuration.name) : state.configuration.name }} · {{ state.configuration.steps }} {{ t('pasos') }} · CFG {{ state.configuration.cfg }}<button class="text-button" :disabled="busy || preparing || activeJob" @click="emit('models')">{{ t('Cambiar modelo o configuración') }}</button></p>
         <p class="helper">{{ t(state.recommendation.reason) }}</p><p v-if="state.recommendation.evidence" class="helper evidence-note">{{ state.recommendation.evidenceDetails ? t('Primera creación comprobada en este equipo: {0} × {1}, {2}.', { 0: state.recommendation.evidenceDetails.width, 1: state.recommendation.evidenceDetails.height, 2: date(state.recommendation.evidenceDetails.at) }) : t(state.recommendation.evidence) }}</p>
-        <button v-if="!state.bound" class="secondary-button full" @click="emit('device')">{{ t('Vincular el motor existente') }} <ArrowRight :size="16"/></button>
+        <button v-if="state.bound" class="text-button" :disabled="busy || preparing || activeJob" @click="emit('setup')">{{ t('Revisar instalación') }}</button>
         <div class="option-section"><h2>{{ t('Formato') }}</h2><div class="format-options"><button v-for="option in (['square', 'landscape', 'portrait'] as const)" :key="option" :class="{ selected: format === option }" :aria-pressed="format === option" @click="emit('update:format', option)"><span :class="['aspect', { square: option === 'square', tall: option === 'portrait' }]"></span>{{ { square: t('Cuadrado'), landscape: t('Horizontal'), portrait: t('Vertical') }[option] }}</button></div></div>
         <details class="profile-details"><summary>{{ t('Modelo y límites de este perfil') }}</summary><p>{{ state.profile.model }} · {{ state.profile.width }} × {{ state.profile.height }} {{ t('como ajuste inicial.') }}</p><p v-for="limitation in state.profile.limitations" :key="limitation">{{ t(limitation) }}</p><a :href="state.profile.source" target="_blank" rel="noreferrer">{{ t('Ver fuente del modelo') }}</a></details>
         <section v-if="state.preparation.status !== 'idle'" class="preparation-feedback" aria-live="polite"><strong>{{ t(state.preparation.message) }}</strong><template v-if="state.preparation.status === 'downloading'"><progress :max="state.preparation.total" :value="state.preparation.received" :aria-label="t('Progreso de descarga')"></progress><span>{{ bytes(state.preparation.received) }} {{ t('de') }} {{ bytes(state.preparation.total) }}</span></template><progress v-else-if="preparing" :aria-label="t('Preparando el perfil')"></progress><button v-if="preparing" class="text-button" :disabled="busy" @click="emit('pause')"><Pause :size="16"/>{{ t('Pausar preparación') }}</button></section>

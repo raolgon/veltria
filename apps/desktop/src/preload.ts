@@ -1,3 +1,7 @@
-import { contextBridge } from 'electron'
-// Read-only container diagnostics. No IPC, filesystem, shell or product operations.
-contextBridge.exposeInMainWorld('veltriaDesktop', Object.freeze({ sandboxed: process.sandboxed, contextIsolated: process.contextIsolated }))
+import { contextBridge, ipcRenderer } from 'electron'
+// Fixed native folder picker only; no generic IPC, filesystem or process access.
+contextBridge.exposeInMainWorld('veltriaDesktop', Object.freeze({
+  sandboxed: process.sandboxed,
+  contextIsolated: process.contextIsolated,
+  chooseEngineDirectory: () => ipcRenderer.invoke('veltria:choose-engine-directory')
+}))
