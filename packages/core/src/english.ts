@@ -616,5 +616,6 @@ export const english: Readonly<Record<string, string>> = {
   "La búsqueda alcanzó su límite de carpetas. Puedes buscar en una ubicación concreta.": "The search reached its folder limit. You can search a specific location.",
   "Veltria se ejecuta en WSL. Para reutilizar una instalación de Windows, abre Veltria para Windows.": "Veltria is running in WSL. To reuse a Windows installation, open Veltria for Windows.",
   "0.5 / PREPARACIÓN LOCAL": "0.5 / LOCAL PREPARATION",
-  "Veltria 0.5 · Creación local": "Veltria 0.5 · Local creation"
+  "Veltria 0.5 · Creación local": "Veltria 0.5 · Local creation",
+  "La ejecución se comprueba por equipo y configuración. Un resultado correcto no garantiza otros ajustes.": "Execution is verified per computer and configuration. A successful result does not guarantee other settings."
 }

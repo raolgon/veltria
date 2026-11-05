@@ -1,3 +1,5 @@
+> La entrega actual es [Veltria 0.5.1](catalog-real-validation.md), que continúa este recorrido al preparar desde Modelos. Las comprobaciones de abajo corresponden a 0.5.0.
+
 # Preparación inicial automática · Veltria 0.5
 
 **Crear → Preparar mi equipo → revisar propuesta → autorizar → Crear imagen.** Una persona puede conservar su descripción y formato durante toda la preparación. Ya no necesita introducir una ruta de Python para vincular una instalación existente.

@@ -111,7 +111,7 @@ export async function createServer(options: Options) {
     return sessionSchema.parse({ csrf: session.csrf, settings: repository.get() })
   })
   app.get('/api/v1/session', async (request) => sessionSchema.parse({ csrf: sessions.get(request.cookies.veltria_session!)!.csrf, settings: repository.get() }))
-  app.get('/api/v1/health', async () => healthSchema.parse({ ...identity, version: '0.5.0', runtime: `Bun ${Bun.version}`, capabilities: { hardware: true, engineProbe: true, generation: true, preparation: true, video: true, lan: false } }))
+  app.get('/api/v1/health', async () => healthSchema.parse({ ...identity, version: '0.5.1', runtime: `Bun ${Bun.version}`, capabilities: { hardware: true, engineProbe: true, generation: true, preparation: true, video: true, lan: false } }))
   app.get('/api/v1/activity', async () => { const image = creation.activity(), movie = video.activity(); return { preparing: image.preparing || movie.preparing, jobs: image.jobs + movie.jobs } })
   app.get('/api/v1/settings', async () => repository.get())
   app.patch('/api/v1/settings', async request => serialized(async () => {

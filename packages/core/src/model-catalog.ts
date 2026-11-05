@@ -11,7 +11,7 @@ export const dreamshaperProfile: ImageProfile = {
   url: 'https://huggingface.co/Lykon/DreamShaper/resolve/228d79cb20811466f5c5710aa91f05dabd0b8a14/DreamShaper_8_pruned.safetensors',
   filename: 'veltria-dreamshaper8-879db523.safetensors', steps: 25,
   limitations: [
-    'Sin generación comprobada todavía en este equipo. La compatibilidad inicial se estima por su familia SD 1.5.',
+    'La ejecución se comprueba por equipo y configuración. Un resultado correcto no garantiza otros ajustes.',
     'El repositorio del checkpoint declara licencia «other» y remite a las condiciones del autor. Revísalas antes de descargar y utilizar el modelo.',
     ...starterProfile.limitations.slice(1)
   ]

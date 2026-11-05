@@ -116,7 +116,10 @@ function selectConfiguration(id: string, prepare: boolean) { void operation(asyn
   selectedJobId.value = ''; plan.value = null
   try { sessionStorage.removeItem('veltria-pending-create') } catch {}
   mediaKind.value = 'image'; await navigate('create')
-  if (prepare) plan.value = await api.plan()
+  if (prepare) {
+    if (!creation.value.bound) { setupOpen.value = true; setupState.value = await api.scanSetup() }
+    else plan.value = await api.plan()
+  }
 }) }
 function importConfiguration(value: unknown) { void operation(async () => {
   await api.importConfiguration(value)
