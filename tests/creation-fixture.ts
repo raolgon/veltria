@@ -53,7 +53,7 @@ export class CreationFixture {
         return new Response(stream, { status: start ? 206 : 200, headers: { 'content-length': String(this.bytes.length - start), ...(start ? { 'content-range': `bytes ${start}-${this.bytes.length - 1}/${this.bytes.length}` } : {}) } })
       }
       if (path === '/system_stats') return Response.json({ system: { comfyui_version: 'fixture-no-GPU' }, devices: [{ name: 'Dispositivo de prueba' }] })
-      if (path === '/object_info') return Response.json(Object.fromEntries(recipeNodes.map(node => [node, node === 'CheckpointLoaderSimple' ? { input: { required: { ckpt_name: [[this.profile.filename]] } } } : {}])))
+      if (path === '/object_info') return Response.json(Object.fromEntries([...recipeNodes, 'LoraLoader'].map(node => [node, node === 'CheckpointLoaderSimple' ? { input: { required: { ckpt_name: [[this.profile.filename]] } } } : {}])))
       if (path === '/queue') return Response.json({ queue_running: [], queue_pending: [] })
       if (path === '/prompt' && request.method === 'POST') {
         const input: any = await request.json(); this.submissions.push(input); this.accepted.set(input.prompt_id, input)

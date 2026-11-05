@@ -9,12 +9,12 @@ const waitFor = async <T>(work: () => Promise<T>, predicate: (value: T) => boole
   do { const value = await work(); if (predicate(value)) return value; await Bun.sleep(25) } while (Date.now() < deadline)
   throw new Error('Estado esperado no alcanzado')
 }
-async function setup(multiple = false) {
+async function setup(multiple = false, adaptation = false) {
   const root = await mkdtemp(join(tmpdir(), 'Veltria image contract with spaces ')), ui = join(root, 'UI')
   await mkdir(ui); await writeFile(join(ui, 'index.html'), '<title>fixture</title>')
   const fixture = new CreationFixture(), binding = await fixture.binding(root)
   const create = async () => {
-    const server = await createServer({ dataDir: root, uiDir: ui, instanceId: crypto.randomUUID(), controlToken: 'a'.repeat(64), creation: { profile: fixture.profile, ...(multiple ? { profiles: [fixture.profile, { ...fixture.profile, id: 'fixture-second', title: 'Segundo modelo de prueba', filename: 'fixture-second.safetensors', revision: 'second-v1' }] } : {}), hardware: async () => fixtureHardware, disk: async () => fixture.availableBytes, engine: fixture.engine, allowLocalFixture: true } })
+    const server = await createServer({ dataDir: root, uiDir: ui, instanceId: crypto.randomUUID(), controlToken: 'a'.repeat(64), creation: { profile: fixture.profile, ...(multiple ? { profiles: [fixture.profile, { ...fixture.profile, id: 'fixture-second', title: 'Segundo modelo de prueba', filename: 'fixture-second.safetensors', revision: 'second-v1' }, ...(adaptation ? [{ ...fixture.profile, id: 'fixture-lora', filename: 'fixture-lora.safetensors', adaptation: { base: fixture.profile.id, strength: 0.7 } }] : [])] } : {}), hardware: async () => fixtureHardware, disk: async () => fixture.availableBytes, engine: fixture.engine, allowLocalFixture: true } })
     const origin = await server.listen()
     const bootstrap = await fetch(`${origin}/api/v1/session`, { method: 'POST', headers: { origin, 'content-type': 'application/json' }, body: JSON.stringify({ nonce: server.issueNonce() }) })
     const session: any = await bootstrap.json(), cookie = bootstrap.headers.get('set-cookie')!.split(';')[0]
@@ -256,3 +256,25 @@ test('catálogo: descarga por modelo, configura sin redescargar, importa/exporta
     } finally { await reopened.server.close() }
   } finally { await ctx.cleanup() }
 }, 25000)
+
+test('LoRA: un plan prepara base y adaptación, reusa archivos y envía el conjunto al motor', async () => {
+  const ctx = await setup(true, true)
+  try {
+    await ctx.call('/settings', 'PATCH', { engineBinding: ctx.binding })
+    await ctx.call('/catalog/select', 'POST', { configurationId: 'fixture-lora-balanced' })
+    const plan = await ctx.json('/creation/plan')
+    expect(plan.totalBytes).toBe(ctx.fixture.bytes.length * 2)
+    expect(plan.remainingBytes).toBe(plan.totalBytes)
+    await ctx.call('/creation/prepare', 'POST', {revision: plan.revision, acceptLicense: true})
+    await waitFor(() => ctx.json('/creation'), state => state.canCreate)
+    expect((await ctx.json('/creation/plan')).remainingBytes).toBe(0)
+    const response = await ctx.call('/jobs', 'POST', {requestId: crypto.randomUUID(), prompt: 'fixture adaptation', format: 'square'})
+    const job: any = await response.json()
+    const done = await waitFor(() => ctx.json('/jobs/' + job.id), value => ['completed', 'failed'].includes(value.status))
+    expect(done.status).toBe('completed')
+    const graph = ctx.fixture.submissions.at(-1).prompt
+    expect(graph['1'].inputs.ckpt_name).toBe(ctx.fixture.profile.filename)
+    expect(graph['8'].inputs.lora_name).toBe('fixture-lora.safetensors')
+    expect(graph['5'].inputs.model).toEqual(['8', 0])
+  } finally { await ctx.cleanup() }
+})

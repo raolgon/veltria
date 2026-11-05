@@ -2,7 +2,7 @@ import type { Hardware } from '@veltria/contracts'
 export type ImageProfile = {
   id: string; revision: string; title: string; description: string; model: string;
   source: string; license: string; licenseUrl: string; bytes: number; sha256: string;
-  url: string; filename: string; width: number; height: number; steps: number; limitations: string[]
+  url: string; filename: string; width: number; height: number; steps: number; limitations: string[]; adaptation?: { base: string; strength: number }
 }
 export const starterProfile: ImageProfile = {
   id: 'sd15-starter', revision: 'sd15-fp16-euler-20-v1', title: 'Imagen inicial',
@@ -25,13 +25,15 @@ export function recommendImage(hardware: Hardware) {
   return { level: 'recommended' as const, reason: `Tu ${nvidia.name} cumple los mínimos de este perfil a 512 píxeles. La recomendación inicial se basa en recursos; la primera imagen comprobará la ejecución.` }
 }
 export const recipeNodes = ['CheckpointLoaderSimple', 'CLIPTextEncode', 'EmptyLatentImage', 'KSampler', 'VAEDecode', 'SaveImage'] as const
-export function imageWorkflow(checkpoint: string, prompt: string, width: number, height: number, seed: number, jobId: string, steps = 20, cfg = 7) {
+export function imageWorkflow(checkpoint: string, prompt: string, width: number, height: number, seed: number, jobId: string, steps = 20, cfg = 7, lora?: { filename: string; strength: number }) {
+  const modelNode = lora ? '8' : '1'
   return {
+    ...(lora ? { '8': { class_type: 'LoraLoader', inputs: { model: ['1', 0], clip: ['1', 1], lora_name: lora.filename, strength_model: lora.strength, strength_clip: lora.strength } } } : {}),
     '1': { class_type: 'CheckpointLoaderSimple', inputs: { ckpt_name: checkpoint } },
-    '2': { class_type: 'CLIPTextEncode', inputs: { text: prompt, clip: ['1', 1] } },
-    '3': { class_type: 'CLIPTextEncode', inputs: { text: '', clip: ['1', 1] } },
+    '2': { class_type: 'CLIPTextEncode', inputs: { text: prompt, clip: [modelNode, 1] } },
+    '3': { class_type: 'CLIPTextEncode', inputs: { text: '', clip: [modelNode, 1] } },
     '4': { class_type: 'EmptyLatentImage', inputs: { width, height, batch_size: 1 } },
-    '5': { class_type: 'KSampler', inputs: { model: ['1', 0], positive: ['2', 0], negative: ['3', 0], latent_image: ['4', 0], seed, steps, cfg, sampler_name: 'euler', scheduler: 'normal', denoise: 1 } },
+    '5': { class_type: 'KSampler', inputs: { model: [modelNode, 0], positive: ['2', 0], negative: ['3', 0], latent_image: ['4', 0], seed, steps, cfg, sampler_name: 'euler', scheduler: 'normal', denoise: 1 } },
     '6': { class_type: 'VAEDecode', inputs: { samples: ['5', 0], vae: ['1', 2] } },
     '7': { class_type: 'SaveImage', inputs: { images: ['6', 0], filename_prefix: `veltria_${jobId}` } }
   }

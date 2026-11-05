@@ -13,8 +13,12 @@ export const configurationEntrySchema = z.object({ id: z.string(), configuration
 export type ConfigurationEntry = z.infer<typeof configurationEntrySchema>
 export const catalogSchema = z.object({
   selectedModelId: z.string(), selectedConfigurationId: z.string(), busy: z.boolean(),
-  models: z.array(z.object({ profile: imageProfileSchema, status: z.enum(['missing', 'partial', 'downloaded', 'prepared']), received: z.number(), recommendation: recommendationSchema })),
+  models: z.array(z.object({ profile: imageProfileSchema, status: z.enum(['missing', 'partial', 'downloaded', 'prepared']), received: z.number(), remainingBytes: z.number().optional(), recommendation: recommendationSchema })),
   configurations: z.array(configurationEntrySchema)
 })
 export type Catalog = z.infer<typeof catalogSchema>
 export const catalogSelectionSchema = z.object({ configurationId: z.string().min(1).max(100) }).strict()
+
+export const discoveryResultSchema = z.object({ repository: z.string(), revision: z.string(), kind: z.enum(['model', 'lora']), family: z.string(), supported: z.boolean(), files: z.array(z.object({ name: z.string(), bytes: z.number() })), reason: z.string(), source: z.string().url() })
+export const discoverySchema = z.object({ results: z.array(discoveryResultSchema), partial: z.boolean() })
+export type DiscoveryResult = z.infer<typeof discoveryResultSchema>

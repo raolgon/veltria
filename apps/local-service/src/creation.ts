@@ -9,6 +9,7 @@ import { recommendImage, dimensions, imageWorkflow, type ImageProfile, imageMode
 import { detectHardware, SettingsRepository } from '@veltria/adapters'
 import { downloadProfileFile, finishProfileFile, fileBytes } from '../../../packages/adapters/src/profile-download'
 import { LocalImageEngine, engineJson, type ImageEngine } from '../../../packages/adapters/src/image-engine'
+import { resolveModel } from './discovery'
 import { CreationStore } from './creation-store'
 
 export class CreationError extends Error { constructor(message: string, readonly statusCode = 409) { super(message); this.name = 'CreationError' } }
@@ -38,7 +39,18 @@ type Options = { dataDir: string; repository: SettingsRepository; changed: (kind
 export class CreationController {
   readonly store: CreationStore
   private configuration: ConfigurationEntry
-  get models(): readonly ImageProfile[] { return this.options.profiles || (this.options.profile ? [this.options.profile] : imageModels) }
+  get models(): readonly ImageProfile[] { return [...(this.options.profiles || (this.options.profile ? [this.options.profile] : imageModels)), ...this.discoveredModels()] }
+  private discoveredModels(): ImageProfile[] { return (this.options.repository.db.query('SELECT data FROM discovered_models').all() as {data:string}[]).map(row => JSON.parse(row.data)) }
+  async adoptModel(repo: string, file: string, strength = 0.7, baseModelId = 'sd15-starter') {
+    this.assertConfigurationMutable()
+    if (!this.models.some(model => model.id === baseModelId && !model.adaptation)) throw new CreationError('No se encontró un modelo base compatible.')
+    const profile = await resolveModel(repo, file, strength, baseModelId)
+    this.assertConfigurationMutable()
+    if (this.discoveredModels().length >= 100 && !this.models.some(model => model.id === profile.id)) throw new CreationError('El catálogo admite hasta 100 modelos añadidos.')
+    if (!this.models.some(model => model.id === profile.id)) this.options.repository.db.query('INSERT OR IGNORE INTO discovered_models VALUES (?,?)').run(profile.id, JSON.stringify(profile))
+    this.options.changed('creation')
+    return configurationsFor(profile)[0]
+  }
   get profile(): ImageProfile { return this.models.find(model => model.id === this.configuration.configuration.modelId)! }
   configurations() { return [...this.models.flatMap(configurationsFor), ...this.store.configurations()] }
   configurationEntry(id: string) {
@@ -69,12 +81,13 @@ export class CreationController {
   async catalog(): Promise<Catalog> {
     const state = await this.state(), selected = this.profile.id
     const models = await Promise.all(this.models.map(async profile => {
-      const destination = join(this.modelsDirectory(), 'checkpoints', profile.filename)
+      const destination = this.componentPath(profile)
       const size = await fileBytes(destination).catch(() => 0), partial = await fileBytes(`${destination}.part`).catch(() => 0)
       const preparation = profile.id === selected ? this.preparation : this.store.preparation(profile.id)
       const prepared = preparation?.status === 'ready' && preparation.verifiedHash === profile.sha256 && preparation.revision === this.revisionFor(profile) && size === profile.bytes
       const recommendation = profile.id === selected ? state.recommendation : { ...recommendImage(await this.hardware()), verified: false, evidence: null }
-      return { profile, received: size === profile.bytes ? size : Math.min(partial, profile.bytes), status: prepared ? 'prepared' as const : size === profile.bytes ? 'downloaded' as const : partial ? 'partial' as const : 'missing' as const, recommendation }
+      const remainingBytes = (await this.componentBytes(profile)).reduce((sum, item) => sum + item.profile.bytes - item.received, 0)
+      return { profile, remainingBytes, received: size === profile.bytes ? size : Math.min(partial, profile.bytes), status: prepared ? 'prepared' as const : size === profile.bytes ? 'downloaded' as const : partial ? 'partial' as const : 'missing' as const, recommendation }
     }))
     return { models, configurations: this.configurations(), selectedModelId: selected, selectedConfigurationId: this.configuration.id, busy: this.startingPrepare || this.activity().preparing || this.activity().jobs > 0 }
   }
@@ -89,6 +102,7 @@ export class CreationController {
   private hardwareCache: { value: Hardware; at: number } | null = null
   private preparationProgressAt = 0
   constructor(private options: Options) {
+    options.repository.db.exec('CREATE TABLE IF NOT EXISTS discovered_models (id TEXT PRIMARY KEY, data TEXT NOT NULL)')
     this.store = new CreationStore(options.repository.db)
     this.configuration = this.configurations().find(item => item.id === this.store.selection()) || configurationsFor(this.models[0])[0]
     this.engine = options.engine || new LocalImageEngine(options.dataDir)
@@ -96,10 +110,14 @@ export class CreationController {
     // A restart cannot silently resubmit accepted GPU work. Preserve its inputs and exact engine id.
     for (const job of this.store.jobs(0, 10000)) if (!terminal(job)) this.saveJob({ ...job, status: 'interrupted', message: 'Veltria se cerró durante este trabajo. Se conservan su descripción y ajustes; no se ha vuelto a generar automáticamente.' })
   }
-  private idle(): Preparation { return { id: crypto.randomUUID(), profileId: this.profile.id, revision: '', status: 'idle', received: 0, total: this.profile.bytes, message: 'Este perfil todavía no se ha preparado.', updatedAt: now(), checkpoint: null, verifiedHash: null } }
+  private idle(): Preparation { return { id: crypto.randomUUID(), profileId: this.profile.id, revision: '', status: 'idle', received: 0, total: this.components().reduce((sum, item) => sum + item.bytes, 0), message: 'Este perfil todavía no se ha preparado.', updatedAt: now(), checkpoint: null, verifiedHash: null } }
   private modelsDirectory() { return this.options.repository.get().modelsDirectory || join(this.options.dataDir, 'models') }
-  private destination() { return join(this.modelsDirectory(), 'checkpoints', this.profile.filename) }
-  private revisionFor(profile: ImageProfile, binding = this.options.repository.get().engineBinding) { return digest({ profile: profile.revision, sha256: profile.sha256, bytes: profile.bytes, destination: join(this.modelsDirectory(), 'checkpoints', profile.filename), binding }) }
+  private components(profile = this.profile): ImageProfile[] { return profile.adaptation ? [this.models.find(model => model.id === profile.adaptation!.base)!, profile] : [profile] }
+  private componentPath(profile: ImageProfile) { return join(this.modelsDirectory(), profile.adaptation ? 'loras' : 'checkpoints', profile.filename) }
+  private destination() { return this.componentPath(this.profile) }
+  private async componentBytes(profile = this.profile) { return Promise.all(this.components(profile).map(async profile => { const destination = this.componentPath(profile); const size = await fileBytes(destination); return { profile, destination, size, received: size === profile.bytes ? size : Math.min(await fileBytes(destination + '.part'), profile.bytes) } })) }
+
+  private revisionFor(profile: ImageProfile, binding = this.options.repository.get().engineBinding) { return digest({ profile: profile.revision, sha256: profile.sha256, bytes: profile.bytes, destination: this.componentPath(profile), adaptation: profile.adaptation, binding }) }
   private revision() { return this.revisionFor(this.profile) }
   private setPreparation(patch: Partial<Preparation>) { this.preparation = { ...this.preparation, ...patch, updatedAt: now() }; this.store.savePreparation(this.preparation); this.options.changed('creation') }
   private saveJob(job: ImageJob) { job.updatedAt = now(); this.store.saveJob(job); this.options.changed('jobs') }
@@ -123,17 +141,18 @@ export class CreationController {
     return creationStateSchema.parse({ configuration: { id: this.configuration.id, name: this.configuration.configuration.name, origin: this.configuration.origin, ...this.configuration.configuration.parameters }, profile: this.profile, recommendation: { ...recommendation, verified, evidenceDetails: verified ? { at: evidence!.at, width: evidence!.width, height: evidence!.height } : null, evidence: verified ? `Primera creación comprobada en este equipo: ${evidence!.width} × ${evidence!.height}, ${new Date(evidence!.at).toLocaleString('es')}.` : null }, preparation: this.preparation, activeJob: this.store.jobs(0, 10000).find(job => !terminal(job)) || null, bound, engineRunning: !!this.engine.origin, canCreate: ready && bound && ['recommended', 'limited'].includes(recommendation.level) })
   }
   async plan(binding = this.options.repository.get().engineBinding): Promise<PreparationPlan> {
-    const destination = this.destination(), finalBytes = await fileBytes(destination), partialBytes = await fileBytes(`${destination}.part`)
-    const reusable = finalBytes === this.profile.bytes && this.preparation.verifiedHash === this.profile.sha256 ? this.profile.bytes : 0
-    const received = finalBytes === this.profile.bytes ? this.profile.bytes : Math.min(partialBytes, this.profile.bytes)
-    const remaining = this.profile.bytes - received, available = await (this.options.disk ? this.options.disk(dirname(destination)) : diskAvailable(dirname(destination))), required = remaining + 512 * 1024 ** 2
+    const destination = this.destination()
+    const components = await this.componentBytes()
+    const total = components.reduce((sum, item) => sum + item.profile.bytes, 0)
+    const received = components.reduce((sum, item) => sum + item.received, 0)
+    const remaining = total - received, available = await (this.options.disk ? this.options.disk(dirname(destination)) : diskAvailable(dirname(destination))), required = remaining + 512 * 1024 ** 2
     const recommendation = recommendImage(await this.hardware()), blockers: string[] = []
     if (!binding) blockers.push('Falta vincular la carpeta y el Python del motor existente en Mi equipo. No se instalará un segundo motor.')
     if (['unknown', 'unsupported'].includes(recommendation.level)) blockers.push(recommendation.reason)
     if (available === null) blockers.push('No se pudo comprobar el espacio de esta ubicación. Elige otra carpeta accesible.')
     else if (available < required) blockers.push('No hay espacio suficiente para la descarga pendiente y el margen de trabajo de 512 MiB.')
-    if (finalBytes && finalBytes !== this.profile.bytes) blockers.push('Ya existe un archivo distinto en el destino. Se conserva intacto; elige otra ubicación.')
-    return preparationPlanSchema.parse({ revision: this.revisionFor(this.profile, binding), profileId: this.profile.id, destination, totalBytes: this.profile.bytes, remainingBytes: remaining, requiredBytes: required, availableBytes: available, canPrepare: blockers.length === 0, blockers, changes: ['Descargar únicamente el archivo del perfil desde la fuente indicada y comprobar su SHA-256.', 'Reutilizar tu Python y ComfyUI existentes, sin instalar dependencias ni modificar sus modelos.', 'Iniciar un proceso local supervisado con rutas propias de modelos, datos y resultados. No detener otras instancias.', 'Los nodos personalizados permanecen desactivados en este primer perfil. No se generará ninguna imagen hasta pulsar Crear.'], license: this.profile.license, licenseUrl: this.profile.licenseUrl, source: this.profile.source, reuseBytes: reusable || received })
+    if (components.some(item => item.size && item.size !== item.profile.bytes)) blockers.push('Ya existe un archivo distinto en el destino. Se conserva intacto; elige otra ubicación.')
+    return preparationPlanSchema.parse({ revision: this.revisionFor(this.profile, binding), profileId: this.profile.id, destination, totalBytes: total, remainingBytes: remaining, requiredBytes: required, availableBytes: available, canPrepare: blockers.length === 0, blockers, changes: [...components.map(item => `Comprobar o descargar ${item.profile.model}: ${item.profile.bytes} bytes. SHA-256: ${item.profile.sha256}. Fuente: ${item.profile.source}. Licencia: ${item.profile.license} (${item.profile.licenseUrl}).`), 'Reutilizar tu Python y ComfyUI existentes, sin instalar dependencias ni modificar sus modelos.', 'Iniciar un proceso local supervisado con rutas propias de modelos, datos y resultados. No detener otras instancias.', 'Los nodos personalizados permanecen desactivados en este primer perfil. No se generará ninguna imagen hasta pulsar Crear.'], license: this.profile.license, licenseUrl: this.profile.licenseUrl, source: this.profile.source, reuseBytes: received })
   }
   assertConfigurationMutable() { if (this.startingPrepare || this.preparationTask || this.generationTask || this.store.jobs(0, 10000).some(job => !terminal(job))) throw new CreationError('Hay una preparación o creación activa. Termínala o cancélala antes de cambiar el motor o la ubicación.') }
   async configurationChanged() { await this.engine.stop(); this.preparation = this.idle(); this.store.savePreparation(this.preparation); this.hardwareCache = null; this.options.changed('creation') }
@@ -148,28 +167,35 @@ export class CreationController {
       if (!plan.canPrepare) throw new CreationError(plan.blockers.join(' '))
       this.store.authorize(revision, { ...plan, sha256: this.profile.sha256, url: this.profile.url, engineBinding: this.options.repository.get().engineBinding })
       const abort = new AbortController(); this.preparationAbort = abort
-      this.setPreparation({ id: this.preparation.revision === revision ? this.preparation.id : crypto.randomUUID(), revision, status: 'downloading', received: this.profile.bytes - plan.remainingBytes, total: this.profile.bytes, message: 'Preparando la descarga de tu perfil…', checkpoint: null, verifiedHash: null })
+      this.setPreparation({ id: this.preparation.revision === revision ? this.preparation.id : crypto.randomUUID(), revision, status: 'downloading', received: plan.totalBytes - plan.remainingBytes, total: plan.totalBytes, message: 'Preparando la descarga de tu perfil…', checkpoint: null, verifiedHash: null })
       this.preparationTask = this.runPreparation(abort.signal).finally(() => { this.preparationTask = null; this.preparationAbort = null })
       return this.preparation
     } finally { this.startingPrepare = false }
   }
   private async runPreparation(signal: AbortSignal) {
     try {
-      const destination = this.destination(); await mkdir(dirname(destination), { recursive: true, mode: 0o700 })
-      if (await fileBytes(destination) !== this.profile.bytes) await downloadProfileFile(this.profile, destination, signal, (received, restart) => {
-        if (Date.now() - this.preparationProgressAt > 350 || received === this.profile.bytes || restart) {
-          this.preparationProgressAt = Date.now()
-          this.setPreparation({ received, message: restart ? 'El origen no admite continuar esta parte; la descarga vuelve a empezar.' : 'Descargando el perfil de imagen…' })
-        }
-      }, this.options.allowLocalFixture)
-      this.setPreparation({ status: 'verifying', received: this.profile.bytes, message: 'Comprobando la integridad SHA-256 del archivo…' })
-      await finishProfileFile(this.profile, destination, signal)
+      let completed = 0
+      const components = await this.componentBytes()
+      for (const [index, { profile }] of components.entries()) {
+        const preserved = components.slice(index + 1).reduce((sum, item) => sum + item.received, 0)
+        const destination = this.componentPath(profile); await mkdir(dirname(destination), { recursive: true, mode: 0o700 })
+        if (await fileBytes(destination) !== profile.bytes) await downloadProfileFile(profile, destination, signal, (received, restart) => {
+          if (Date.now() - this.preparationProgressAt > 350 || received === profile.bytes || restart) {
+            this.preparationProgressAt = Date.now()
+            this.setPreparation({ received: completed + received + preserved, message: restart ? 'El origen no admite continuar esta parte; la descarga vuelve a empezar.' : 'Descargando el perfil de imagen…' })
+          }
+        }, this.options.allowLocalFixture)
+        this.setPreparation({ status: 'verifying', message: 'Comprobando la integridad SHA-256 del archivo…' })
+        await finishProfileFile(profile, destination, signal)
+        completed += profile.bytes
+        this.setPreparation({ status: 'downloading', received: completed + preserved })
+      }
       this.setPreparation({ verifiedHash: this.profile.sha256, checkpoint: this.profile.filename })
       await this.ensureEngine(signal)
       this.setPreparation({ status: 'ready', message: 'Listo para crear. Tu descripción se conserva; pulsa Crear imagen cuando quieras.' })
     } catch (error) {
-      const received = await fileBytes(`${this.destination()}.part`).catch(() => 0)
-      this.setPreparation({ status: signal.aborted ? 'paused' : 'error', received: this.preparation.verifiedHash ? this.profile.bytes : received, message: signal.aborted ? 'Preparación pausada. Se conserva lo descargado; puedes continuar.' : preparationError(error) })
+      const received = await this.componentBytes().then(items => items.reduce((sum, item) => sum + item.received, 0)).catch(() => 0)
+      this.setPreparation({ status: signal.aborted ? 'paused' : 'error', received, message: signal.aborted ? 'Preparación pausada. Se conserva lo descargado; puedes continuar.' : preparationError(error) })
     }
   }
   async pausePreparation() {
@@ -181,10 +207,14 @@ export class CreationController {
     if (!binding) throw new CreationError('Falta vincular el motor existente en Mi equipo.')
     if (!this.engine.origin) {
       this.setPreparation({ status: 'starting', message: 'Abriendo el motor existente y comprobando el perfil. No se están instalando componentes.' })
-      try { await this.engine.start(binding, this.modelsDirectory(), this.profile.filename, signal) }
+      try { await this.engine.start(binding, this.modelsDirectory(), this.components()[0].filename, signal) }
       catch (error) { this.setPreparation({ status: 'error', message: error instanceof Error ? error.message : 'No se pudo abrir el motor existente.' }); throw error }
       this.setPreparation({ status: 'ready', message: 'El perfil está preparado para crear.' })
     }
+      if (this.profile.adaptation) {
+        const nodes = await engineJson(this.engine.origin!, '/object_info', undefined, signal)
+        if (!nodes.LoraLoader) throw new CreationError('Falta el nodo LoraLoader en este motor. Los archivos se conservan.')
+      }
   }
   async create(input: { requestId: string; prompt: string; format: 'square' | 'landscape' | 'portrait' }): Promise<ImageJob> {
     const previous = this.store.byRequest(input.requestId)
@@ -239,7 +269,7 @@ export class CreationController {
       update({ status: 'submitting', enginePromptId: job.id, engineUrl: origin, engineVersion: this.engine.version, message: 'Enviando tu creación al motor…' })
       // Persist the client-chosen prompt id before sending. A lost response must never cause resubmission.
       try {
-        const accepted = await engineJson(origin, '/prompt', { prompt_id: job.id, client_id: clientId, prompt: imageWorkflow(this.profile.filename, job.prompt, job.width, job.height, job.seed, job.id, job.steps, job.cfg ?? 7) }, signal)
+        const accepted = await engineJson(origin, '/prompt', { prompt_id: job.id, client_id: clientId, prompt: imageWorkflow(this.components()[0].filename, job.prompt, job.width, job.height, job.seed, job.id, job.steps, job.cfg ?? 7, this.profile.adaptation ? { filename: this.profile.filename, strength: this.profile.adaptation.strength } : undefined) }, signal)
         if (accepted.prompt_id !== job.id) throw new Error('El motor no conservó la identidad del trabajo. No se enviará de nuevo automáticamente.')
       } catch (error) {
         update({ status: 'interrupted', message: `No se pudo confirmar el envío. Se conserva su identificador y no se repetirá automáticamente. ${error instanceof Error ? error.message : ''}` }); return

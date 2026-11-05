@@ -22,7 +22,7 @@ export const createImageSchema = z.object({ requestId: z.string().uuid(), prompt
 export const imageProfileSchema = z.object({
   id: z.string(), revision: z.string(), title: z.string(), description: z.string(), model: z.string(),
   source: z.string().url(), license: z.string(), licenseUrl: z.string().url(), bytes: z.number(),
-  width: z.number(), height: z.number(), steps: z.number(), limitations: z.array(z.string())
+  width: z.number(), height: z.number(), steps: z.number(), limitations: z.array(z.string()), adaptation: z.object({ base: z.string(), strength: z.number().min(0).max(1.5) }).optional()
 })
 export const recommendationSchema = z.object({ level: z.enum(['recommended', 'limited', 'unknown', 'unsupported']), reason: z.string(), verified: z.boolean(), evidence: z.string().nullable(), evidenceDetails: z.object({ at: z.string(), width: z.number(), height: z.number() }).nullable().optional() })
 export const preparationPlanSchema = z.object({

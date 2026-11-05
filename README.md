@@ -1,6 +1,8 @@
 # Veltria — web local y Electron
 
-## Versión actual: 0.5.1 · preparación y catálogo
+## Versión actual: 0.6.0 · descubrir y preparar
+
+En **Modelos**, busca por intención o nombre, consulta Hugging Face y prepara checkpoints/finetunes y LoRA estándar SD 1.5 compatibles con una configuración inicial. Filtros por equipo, descarga pendiente, detalles avanzados y preparación conjunta de adaptación y modelo base. Otras familias se muestran con su soporte pendiente; no se promete ejecutar cualquier archivo.
 
 **Crear → Preparar mi equipo** busca y propone reutilizar tu ComfyUI existente, sin pedir una ruta de Python. Revisa la descarga, el espacio y los cambios, autoriza la preparación y crea cuando termine. Si no lo encuentra, puedes elegir una carpeta. La búsqueda sólo lee archivos; no instala otro motor ni modifica tus modelos.
 
@@ -14,18 +16,18 @@ Abrir en Windows PowerShell, después de cerrar la versión anterior:
 
 ```powershell
 Set-Location 'C:\Users\rafao\Downloads\veltria-codex\veltria'
-.\release\0.5.1\win-unpacked\Veltria.exe
+.\release\0.6.0\win-unpacked\Veltria.exe
 # Navegador:
-.\build\browser\0.5.1\veltria-web.exe
+.\build\browser\0.6.0\veltria-web.exe
 ```
 
 Linux / WSL con pantalla:
 
 ```bash
 cd '/mnt/c/Users/rafao/Downloads/veltria-codex/veltria'
-./release/0.5.1/linux-unpacked/veltria
+./release/0.6.0/linux-unpacked/veltria
 # Navegador:
-./build/browser/0.5.1/veltria-web
+./build/browser/0.6.0/veltria-web
 ```
 
 El lanzador web imprime el enlace autorizado. Conservar los ejecutables con sus recursos. El paquete usa **protocolo 6** y SQLite de trabajos **esquema 4**; conserva imagen, preferencias y biblioteca, y crea una copia antes de actualizar datos anteriores. No adjuntarse a servicios anteriores ni compartir SQLite entre Windows y Linux. Las entregas anteriores se conservaron en sus carpetas.
@@ -44,7 +46,7 @@ bun run start:desktop
 
 `bun run dev` usa Vite 43120 y el proxy a Bun 43121. El servicio contiene toda la lógica y SQLite; Electron conserva su Node y sólo administra ventana, supervisor y diálogos. La UI es compartida y sigue Obsidian. No hay LAN, nube, LLM para reescribir descripciones ni instalación de motores. Los modelos del catálogo se descargan únicamente después de revisar y autorizar su plan. La descarga de los componentes H3 y la importación de workflows arbitrarios siguen pendientes.
 
-[Validación real del catálogo](docs/catalog-real-validation.md) · [Preparación automática: búsqueda, pruebas y límites](docs/automatic-setup.md) · [Catálogo: modelos, configuraciones y validación](docs/model-catalog.md) · [Video: receta, componentes, pruebas, comandos y límites](docs/video-validation.md) · [primera imagen real](docs/first-image-validation.md) · [idiomas](docs/languages.md) · [recursos](docs/resources.md).
+[Buscar modelos y adaptaciones](docs/model-discovery.md) · [Validación real del catálogo](docs/catalog-real-validation.md) · [Preparación automática: búsqueda, pruebas y límites](docs/automatic-setup.md) · [Catálogo: modelos, configuraciones y validación](docs/model-catalog.md) · [Video: receta, componentes, pruebas, comandos y límites](docs/video-validation.md) · [primera imagen real](docs/first-image-validation.md) · [idiomas](docs/languages.md) · [recursos](docs/resources.md).
 
 ---
 

@@ -1,3 +1,5 @@
+> Búsqueda externa y adaptaciones en [Veltria 0.6](model-discovery.md).
+
 > Registro de la entrega 0.4. La comprobación posterior de DreamShaper y las configuraciones se documenta en [validación real del catálogo 0.5.1](catalog-real-validation.md).
 
 # Catálogo local · Veltria 0.4

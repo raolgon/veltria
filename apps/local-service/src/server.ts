@@ -1,3 +1,4 @@
+import { discover, discoverInput, adoptInput } from './discovery'
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify'
 import cookie from '@fastify/cookie'
 import staticFiles from '@fastify/static'
@@ -111,7 +112,7 @@ export async function createServer(options: Options) {
     return sessionSchema.parse({ csrf: session.csrf, settings: repository.get() })
   })
   app.get('/api/v1/session', async (request) => sessionSchema.parse({ csrf: sessions.get(request.cookies.veltria_session!)!.csrf, settings: repository.get() }))
-  app.get('/api/v1/health', async () => healthSchema.parse({ ...identity, version: '0.5.1', runtime: `Bun ${Bun.version}`, capabilities: { hardware: true, engineProbe: true, generation: true, preparation: true, video: true, lan: false } }))
+  app.get('/api/v1/health', async () => healthSchema.parse({ ...identity, version: '0.6.0', runtime: `Bun ${Bun.version}`, capabilities: { hardware: true, engineProbe: true, generation: true, preparation: true, video: true, lan: false } }))
   app.get('/api/v1/activity', async () => { const image = creation.activity(), movie = video.activity(); return { preparing: image.preparing || movie.preparing, jobs: image.jobs + movie.jobs } })
   app.get('/api/v1/settings', async () => repository.get())
   app.patch('/api/v1/settings', async request => serialized(async () => {
@@ -148,6 +149,8 @@ export async function createServer(options: Options) {
     reply.code(202)
     return creation.prepare(proposal.preparation.revision)
   }))
+  app.post('/api/v1/catalog/search', async request => { const input = discoverInput.parse(request.body); try { return await discover(input.query, input.kind) } catch (error) { throw new CreationError(error instanceof Error ? error.message : 'No se pudo consultar el proveedor.', 502) } })
+  app.post('/api/v1/catalog/adopt', async request => serialized(async () => { const input = adoptInput.parse(request.body); try { return await creation.adoptModel(input.repository, input.file, input.strength, input.baseModelId) } catch (error) { if (error instanceof CreationError) throw error; throw new CreationError(error instanceof Error ? error.message : 'No se pudo comprobar el archivo.', 502) } }))
   app.get('/api/v1/catalog', async () => catalogSchema.parse(await creation.catalog()))
   app.post('/api/v1/catalog/select', async request => serialized(async () => {
     const input = catalogSelectionSchema.parse(request.body)
