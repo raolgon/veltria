@@ -65,6 +65,8 @@ cd '/mnt/c/Users/rafao/Downloads/veltria-codex/veltria'
 ./build/browser/0.5.0/veltria-web
 ```
 
+El monitor lateral muestra también los nombres detectados de CPU y GPU en letra pequeña, con el nombre completo al pasar el cursor. RAM y VRAM conservan sus lecturas habituales; en la barra estrecha los nombres siguen en el detalle accesible.
+
 ## Validación
 
 Resultados de esta entrega:
