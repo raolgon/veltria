@@ -20,7 +20,7 @@ export const jobSchema = z.object({
 export type ImageJob = z.infer<typeof jobSchema>
 export const createImageSchema = z.object({ requestId: z.string().uuid(), prompt: z.string().trim().min(1).max(4000), format: imageFormatSchema.default('square') }).strict()
 export const imageProfileSchema = z.object({
-  id: z.string(), revision: z.string(), title: z.string(), description: z.string(), model: z.string(),
+  family: z.enum(['sd15','sdxl']).optional(), id: z.string(), revision: z.string(), title: z.string(), description: z.string(), model: z.string(),
   source: z.string().url(), license: z.string(), licenseUrl: z.string().url(), bytes: z.number(),
   width: z.number(), height: z.number(), steps: z.number(), limitations: z.array(z.string()), adaptation: z.object({ base: z.string(), strength: z.number().min(0).max(1.5) }).optional()
 })

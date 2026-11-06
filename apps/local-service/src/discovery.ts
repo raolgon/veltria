@@ -25,12 +25,13 @@ export function inspectModel(value: unknown) {
   const data = metadata.parse(value), tags = data.tags.join(' ').toLowerCase()
   const base = JSON.stringify(data.cardData?.base_model || '').toLowerCase()
   const lora = /(?:^|\s)(?:lora|lycoris|peft)(?:\s|$)/.test(tags)
-  const known = imageModels.some(model => model.source === `https://huggingface.co/${data.id}` && model.url.includes('/' + data.sha + '/'))
+  const known = imageModels.some(model => model.family!=='sdxl' && model.source === `https://huggingface.co/${data.id}` && model.url.includes('/' + data.sha + '/'))
+  const knownXL=imageModels.find(model=>model.family==='sdxl' && model.source===`https://huggingface.co/${data.id}` && model.url.includes('/'+data.sha+'/'))
   const sd15 = known || /stable-diffusion-v1-5|stable-diffusion-v1.5|sd-1.5|sd15|sd-1-5/.test(base + ' ' + tags)
-  const files = data.siblings.filter(file => file.rfilename.endsWith('.safetensors') && file.lfs && !file.rfilename.includes('/') && !/inpainting|lcm|turbo|unet|text_encoder/i.test(file.rfilename) && file.lfs.size < 6 * 1024 ** 3).sort((a,b) => Number(imageModels.some(model => model.sha256 === b.lfs!.sha256)) - Number(imageModels.some(model => model.sha256 === a.lfs!.sha256)) || a.lfs!.size - b.lfs!.size)
+  const files = data.siblings.filter(file => file.rfilename.endsWith('.safetensors') && file.lfs && !file.rfilename.includes('/') && !/inpainting|lcm|turbo|unet|text_encoder/i.test(file.rfilename) && file.lfs.size < (knownXL?7:6) * 1024 ** 3 && (!knownXL || file.lfs.sha256===knownXL.sha256)).sort((a,b) => Number(imageModels.some(model => model.sha256 === b.lfs!.sha256)) - Number(imageModels.some(model => model.sha256 === a.lfs!.sha256)) || a.lfs!.size - b.lfs!.size)
   const standardRecipe = !/(?:lcm|tcd|lightning|turbo|flow-matching|flash-sd)/i.test(data.id + ' ' + tags)
-  const supported = standardRecipe && sd15 && !data.gated && files.length > 0 && !/lycoris|dora|loha|lokr|locon/.test(tags)
-  return { data, result: discoveryResultSchema.parse({ repository: data.id, downloads: data.downloads ?? null, revision: data.sha, kind: lora ? 'lora' : 'model', family: sd15 ? 'SD 1.5' : 'unknown', supported, files: files.map(file => ({ name: file.rfilename, bytes: file.lfs!.size })), reason: data.gated ? 'Este repositorio requiere acceso del proveedor; la conexión de cuentas está pendiente.' : supported ? 'Familia declarada compatible; ejecución sin comprobar.' : 'Veltria todavía no tiene una receta compatible confirmada para estos archivos.', source: `https://huggingface.co/${data.id}` }) }
+  const supported = standardRecipe && (sd15 || !!knownXL) && !data.gated && files.length > 0 && !/lycoris|dora|loha|lokr|locon/.test(tags)
+  return { data, result: discoveryResultSchema.parse({ repository: data.id, downloads: data.downloads ?? null, revision: data.sha, kind: lora ? 'lora' : 'model', family: knownXL?'SDXL':sd15 ? 'SD 1.5' : 'unknown', supported, files: files.map(file => ({ name: file.rfilename, bytes: file.lfs!.size })), reason: data.gated ? 'Este repositorio requiere acceso del proveedor; la conexión de cuentas está pendiente.' : supported ? 'Familia declarada compatible; ejecución sin comprobar.' : 'Veltria todavía no tiene una receta compatible confirmada para estos archivos.', source: `https://huggingface.co/${data.id}` }) }
 }
 export async function discover(query: string, kind: string) {
   const terms: Record<string,string> = { photography: 'realistic', fotografía: 'realistic', fotografia: 'realistic', ilustración: 'illustration', ilustracion: 'illustration', personajes: 'character', anime: 'anime' }
@@ -85,6 +86,7 @@ export async function resolveModel(repo: string, filename: string, strength = 0.
   if (!result.supported) throw new Error(result.reason)
   const file = data.siblings.find(item => item.rfilename === filename && result.files.some(f => f.name === filename))
   if (!file?.lfs) throw new Error('No se encontró un archivo verificable compatible.')
+  if(result.family==='SDXL'){const pinned=imageModels.find(model=>model.family==='sdxl' && model.sha256===file.lfs!.sha256);if(pinned)return pinned}
   await verifyRemoteHeader(`${result.source}/resolve/${data.sha}/${encodeURIComponent(filename)}`, result.kind === 'lora')
   const existing = imageModels.find(model => model.sha256 === file.lfs!.sha256)
   if (existing && result.kind !== 'lora') return existing

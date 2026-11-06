@@ -1,3 +1,5 @@
+> Entrega actual: [Veltria 0.8, SDXL local y prueba real en Windows](sdxl-validation.md).
+
 # Gestionar lo descargado · 0.7.0
 
 ## Uso

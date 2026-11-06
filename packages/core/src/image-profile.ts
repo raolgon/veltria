@@ -1,6 +1,6 @@
 import type { Hardware } from '@veltria/contracts'
 export type ImageProfile = {
-  id: string; revision: string; title: string; description: string; model: string;
+  family?: 'sd15' | 'sdxl'; id: string; revision: string; title: string; description: string; model: string;
   source: string; license: string; licenseUrl: string; bytes: number; sha256: string;
   url: string; filename: string; width: number; height: number; steps: number; limitations: string[]; adaptation?: { base: string; strength: number }
 }
@@ -15,10 +15,15 @@ export const starterProfile: ImageProfile = {
   limitations: ['Modelo clásico de 2022: calidad y comprensión inferiores a modelos recientes.', 'Interpreta mejor las descripciones en inglés; el español puede dar resultados menos fieles.', 'Texto, rostros y detalles pequeños pueden contener errores.']
 }
 export const dimensions = { square: [512, 512], landscape: [512, 384], portrait: [384, 512] } as const
-export function recommendImage(hardware: Hardware) {
+export function recommendImage(hardware: Hardware, profile?: Pick<ImageProfile,'family'>) {
   if (!['win32', 'linux'].includes(hardware.platform)) return { level: 'unsupported' as const, reason: 'Este perfil sólo está habilitado en Windows y Linux. macOS sigue pendiente de validación.' }
   const nvidia = hardware.gpus.find(gpu => /nvidia/i.test(gpu.name))
   if (!nvidia || nvidia.vramTotal === null) return { level: 'unknown' as const, reason: 'No se pudo confirmar una GPU NVIDIA con memoria dedicada suficiente. Actualiza la detección del equipo.' }
+  if(profile?.family==='sdxl') {
+    if(!['win32','linux'].includes(hardware.platform)) return {level:'unsupported' as const,reason:'SDXL sólo está habilitado en Windows y Linux; macOS está pendiente.'}
+    if(nvidia.vramTotal < 5.5 * 1024 ** 3 || (hardware.ram.total??0)<14*1024**3) return {level:'unsupported' as const,reason:'Este perfil SDXL requiere al menos 6 GB de VRAM y 16 GB de RAM nominales; no está verificado para equipos menores.'}
+    return {level:'limited' as const,reason:'SDXL usa un perfil de 768 píxeles y descarga parcial de memoria a RAM. Cierra otras aplicaciones antes de preparar; la ejecución se comprobará con una imagen real.'}
+  }
   // The OS reports usable memory, slightly below the nominal 4/8 GB device capacities.
   if (nvidia.vramTotal < 3.5 * 1024 ** 3 || (hardware.ram.total ?? 0) < 7 * 1024 ** 3) return { level: 'unsupported' as const, reason: 'Este primer perfil necesita una GPU NVIDIA de al menos 4 GB y 8 GB de RAM nominales. No se ha validado una alternativa para este equipo.' }
   if ((hardware.ram.available ?? 0) < 1.5 * 1024 ** 3 || nvidia.vramAvailable !== null && nvidia.vramAvailable < 2 * 1024 ** 3) return { level: 'limited' as const, reason: 'El equipo cumple los mínimos, pero queda poca memoria libre. Cierra aplicaciones que usen GPU o mucha RAM antes de crear.' }
@@ -38,3 +43,5 @@ export function imageWorkflow(checkpoint: string, prompt: string, width: number,
     '7': { class_type: 'SaveImage', inputs: { images: ['6', 0], filename_prefix: `veltria_${jobId}` } }
   }
 }
+
+export function profileDimensions(format: 'square'|'landscape'|'portrait', profile?: Pick<ImageProfile,'family'>) { return profile?.family==='sdxl' ? ({square:[768,768],landscape:[768,576],portrait:[576,768]} as const)[format] : dimensions[format] }

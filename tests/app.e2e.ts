@@ -208,7 +208,7 @@ test('idioma: cambio inmediato, dos ventanas, reapertura, contenido propio y mó
   expect(errors).toEqual([])
 })
 
-test('catálogo real: dos modelos, configuraciones, plan y navegación en escritorio y móvil', async ({ page }) => {
+test('catálogo real: tres modelos, configuraciones, plan y navegación en escritorio y móvil', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message))
   await page.goto(await launchUrl())
   await expect(page.getByText('Servicio local conectado')).toBeVisible()
@@ -223,12 +223,12 @@ test('catálogo real: dos modelos, configuraciones, plan y navegación en escrit
     const nav = width <= 740 ? page.locator('.mobile-nav') : page.locator('.sidebar nav')
     await nav.getByRole('button', { name: locale === 'en' ? 'Models' : 'Modelos', exact: true }).click()
     await page.getByRole('button', { name: locale === 'en' ? 'Explore all' : 'Explorar todo', exact: true }).click()
-    await expect(page.locator('.model-row')).toHaveCount(2)
-    await expect(page.locator('.model-row').last()).toContainText('DreamShaper 8')
+    await expect(page.locator('.model-row')).toHaveCount(3)
+    await expect(page.locator('.model-row').last()).toContainText('Stable Diffusion XL')
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
     await page.screenshot({ path: `test-results/catalog-${locale}-${theme}-${width}.png`, fullPage: true })
   }
-  await page.locator('.model-row').last().getByRole('button', { name: 'Review download', exact: true }).click()
+  await page.locator('.model-row').filter({hasText:'DreamShaper 8'}).getByRole('button', { name: 'Review download', exact: true }).click()
   const plan = page.getByRole('dialog')
   await expect(plan).toBeVisible()
   await expect(plan.getByRole('heading', { name: 'Prepare my computer', exact: true })).toBeVisible()
@@ -263,7 +263,7 @@ test('descubrimiento: intención, filtros, resultados externos y fallo recuperab
   await page.getByRole('button',{name:'Buscar en Internet',exact:true}).click()
   await expect(page.getByRole('alert')).toContainText('Proveedor no disponible')
   await page.locator('#model-search').fill('')
-  await expect(page.locator('.model-row')).toHaveCount(2)
+  await expect(page.locator('.model-row')).toHaveCount(3)
 })
 
 test('explorar compatibles sin texto: popularidad, más páginas y conservación ante fallos', async ({page}) => {

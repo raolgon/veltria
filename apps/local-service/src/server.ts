@@ -112,7 +112,7 @@ export async function createServer(options: Options) {
     return sessionSchema.parse({ csrf: session.csrf, settings: repository.get() })
   })
   app.get('/api/v1/session', async (request) => sessionSchema.parse({ csrf: sessions.get(request.cookies.veltria_session!)!.csrf, settings: repository.get() }))
-  app.get('/api/v1/health', async () => healthSchema.parse({ ...identity, version: '0.7.0', runtime: `Bun ${Bun.version}`, capabilities: { hardware: true, engineProbe: true, generation: true, preparation: true, video: true, lan: false } }))
+  app.get('/api/v1/health', async () => healthSchema.parse({ ...identity, version: '0.8.0', runtime: `Bun ${Bun.version}`, capabilities: { hardware: true, engineProbe: true, generation: true, preparation: true, video: true, lan: false } }))
   app.get('/api/v1/activity', async () => { const image = creation.activity(), movie = video.activity(); return { preparing: image.preparing || movie.preparing, jobs: image.jobs + movie.jobs } })
   app.get('/api/v1/settings', async () => repository.get())
   app.patch('/api/v1/settings', async request => serialized(async () => {
@@ -150,7 +150,7 @@ export async function createServer(options: Options) {
     return creation.prepare(proposal.preparation.revision)
   }))
   app.post('/api/v1/catalog/browse', async request => {
-    const input = browseInput.parse(request.body), state = await creation.state()
+    const input = browseInput.parse(request.body), state = {recommendation:await creation.discoveryRecommendation()}
     if (['unknown', 'unsupported'].includes(state.recommendation.level)) return { results: [], partial: false, nextCursor: null, hardwareReason: state.recommendation.reason }
     try { return await browseCompatible(input.kind, input.cursor) } catch (error) { throw new CreationError(error instanceof Error ? error.message : 'No se pudo consultar el proveedor.', 502) }
   })

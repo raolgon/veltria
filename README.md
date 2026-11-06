@@ -1,16 +1,18 @@
 # Veltria — web local y Electron
 
-## Versión actual: 0.7.0 · gestionar lo descargado
+## Versión actual: 0.8.0 · SDXL local
+
+SDXL Base 1.0 está integrado con una configuración conservadora para NVIDIA de 6 GB y 16 GB de RAM: 768 px y descarga a RAM con `--lowvram`. Se descargó el checkpoint oficial con autorización, se verificó SHA-256 y se generó una imagen real de 768 × 768 en esta RTX 4050. La ficha distingue compatibilidad estimada y ejecución comprobada; no garantiza lo mismo en todos los equipos. [Evidencia, comandos y límites](docs/sdxl-validation.md).
 
 En **Modelos → Gestionar descargas**, revisa archivos completos y parciales, tamaño, ubicación y perfiles compartidos. Puedes usarlos, continuar su preparación o revisar su retirada. Retirar un LoRA conserva la base; retirar un archivo compartido requiere confirmar los perfiles afectados. Creaciones y configuraciones se conservan.
 
 En **Modelos**, Veltria propone un punto de partida priorizando opciones comprobadas con los ajustes elegidos y archivos ya preparados. Puedes volver al orden por popularidad. Las fichas explican utilidad, ajustes iniciales y compatibilidad estimada o comprobada.
 
-En **Modelos → Ver modelos para mi equipo**, explora sin escribir una búsqueda, con los más descargados primero y más páginas disponibles. También busca por intención o nombre, consulta Hugging Face y prepara checkpoints/finetunes y LoRA estándar SD 1.5 compatibles con una configuración inicial. Filtros por equipo, descarga pendiente, detalles avanzados y preparación conjunta de adaptación y modelo base. Otras familias se muestran con su soporte pendiente; no se promete ejecutar cualquier archivo.
+En **Modelos → Ver modelos para mi equipo**, explora sin escribir una búsqueda, con los más descargados primero y más páginas disponibles. También busca por intención o nombre, consulta Hugging Face y prepara checkpoints/finetunes y LoRA estándar SD 1.5 compatibles con una configuración inicial. Filtros por equipo, descarga pendiente, detalles avanzados y preparación conjunta de adaptación y modelo base. Otras familias, salvo el SDXL oficial incluido, se muestran con su soporte pendiente; no se promete ejecutar cualquier archivo.
 
 **Crear → Preparar mi equipo** busca y propone reutilizar tu ComfyUI existente, sin pedir una ruta de Python. Revisa la descarga, el espacio y los cambios, autoriza la preparación y crea cuando termine. Si no lo encuentra, puedes elegir una carpeta. La búsqueda sólo lee archivos; no instala otro motor ni modifica tus modelos.
 
-**Modelos** permite elegir SD 1.5 o DreamShaper 8, revisar la descarga y preparar el modelo para usarlo en **Crear**. Hay configuraciones equilibrada, borrador y más pasos por modelo, exportación/importación de JSON de Veltria y selección persistente. Se conservan las descargas parciales al cambiar de modelo; cambiar sólo ajustes no vuelve a descargar los pesos.
+**Modelos** permite elegir SD 1.5, DreamShaper 8 o SDXL Base 1.0, revisar la descarga y preparar el modelo para usarlo en **Crear**. Hay configuraciones equilibrada, borrador y más pasos por modelo, exportación/importación de JSON de Veltria y selección persistente. Se conservan las descargas parciales al cambiar de modelo; cambiar sólo ajustes no vuelve a descargar los pesos.
 
 Crear permite elegir **Imágenes** o **Video**. Conserva la generación de imagen, la biblioteca, los recursos en vivo y español/inglés. El primer flujo de video reutiliza MiniMax H3 y sus componentes existentes: plan previo sin descargas, comprobación del motor, vistas previas, progreso real, MP4 con reproducción/guardado y biblioteca de videos. Una tarea de generación a la vez.
 
@@ -20,21 +22,21 @@ Abrir en Windows PowerShell, después de cerrar la versión anterior:
 
 ```powershell
 Set-Location 'C:\Users\rafao\Downloads\veltria-codex\veltria'
-.\release\0.7.0\win-unpacked\Veltria.exe
+.\release\0.8.0\win-unpacked\Veltria.exe
 # Navegador:
-.\build\browser\0.7.0\veltria-web.exe
+.\build\browser\0.8.0\veltria-web.exe
 ```
 
 Linux / WSL con pantalla:
 
 ```bash
 cd '/mnt/c/Users/rafao/Downloads/veltria-codex/veltria'
-./release/0.7.0/linux-unpacked/veltria
+./release/0.8.0/linux-unpacked/veltria
 # Navegador:
-./build/browser/0.7.0/veltria-web
+./build/browser/0.8.0/veltria-web
 ```
 
-El lanzador web imprime el enlace autorizado. Conservar los ejecutables con sus recursos. El paquete usa **protocolo 6** y SQLite de trabajos **esquema 4**; conserva imagen, preferencias y biblioteca, y crea una copia antes de actualizar datos anteriores. No adjuntarse a servicios anteriores ni compartir SQLite entre Windows y Linux. Las entregas anteriores se conservaron en sus carpetas.
+El lanzador web imprime el enlace autorizado. Conservar los ejecutables con sus recursos. El paquete usa **protocolo 7** y SQLite de trabajos **esquema 4**; conserva imagen, preferencias y biblioteca, y crea una copia antes de actualizar datos anteriores. No adjuntarse a servicios anteriores ni compartir SQLite entre Windows y Linux. Las entregas anteriores se conservaron en sus carpetas. Cerrar las versiones anteriores antes de abrir esta; las nuevas configuraciones SDXL requieren 0.8 y no se garantiza volver a una versión anterior con los mismos datos.
 
 Desarrollo con Bun 1.4.4 y Node 24.13.0:
 

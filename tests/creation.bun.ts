@@ -9,12 +9,12 @@ const waitFor = async <T>(work: () => Promise<T>, predicate: (value: T) => boole
   do { const value = await work(); if (predicate(value)) return value; await Bun.sleep(25) } while (Date.now() < deadline)
   throw new Error('Estado esperado no alcanzado')
 }
-async function setup(multiple = false, adaptation = false) {
+async function setup(multiple = false, adaptation = false, xl = false) {
   const root = await mkdtemp(join(tmpdir(), 'Veltria image contract with spaces ')), ui = join(root, 'UI')
   await mkdir(ui); await writeFile(join(ui, 'index.html'), '<title>fixture</title>')
   const fixture = new CreationFixture(), binding = await fixture.binding(root)
   const create = async () => {
-    const server = await createServer({ dataDir: root, uiDir: ui, instanceId: crypto.randomUUID(), controlToken: 'a'.repeat(64), creation: { profile: fixture.profile, ...(multiple ? { profiles: [fixture.profile, { ...fixture.profile, id: 'fixture-second', title: 'Segundo modelo de prueba', filename: 'fixture-second.safetensors', revision: 'second-v1' }, ...(adaptation ? [{ ...fixture.profile, id: 'fixture-lora', filename: 'fixture-lora.safetensors', adaptation: { base: fixture.profile.id, strength: 0.7 } }] : [])] } : {}), hardware: async () => fixtureHardware, disk: async () => fixture.availableBytes, engine: fixture.engine, allowLocalFixture: true } })
+    const server = await createServer({ dataDir: root, uiDir: ui, instanceId: crypto.randomUUID(), controlToken: 'a'.repeat(64), creation: { profile: fixture.profile, ...(multiple ? { profiles: [fixture.profile, { ...fixture.profile, id: 'fixture-second', title: 'Segundo modelo de prueba', filename: 'fixture-second.safetensors', revision: 'second-v1' }, ...(xl ? [{...fixture.profile,id:'fixture-xl',filename:'fixture-xl.safetensors',family:'sdxl' as const,width:768,height:768}] : []), ...(adaptation ? [{ ...fixture.profile, id: 'fixture-lora', filename: 'fixture-lora.safetensors', adaptation: { base: fixture.profile.id, strength: 0.7 } }] : [])] } : {}), hardware: async () => fixtureHardware, disk: async () => fixture.availableBytes, engine: fixture.engine, allowLocalFixture: true } })
     const origin = await server.listen()
     const bootstrap = await fetch(`${origin}/api/v1/session`, { method: 'POST', headers: { origin, 'content-type': 'application/json' }, body: JSON.stringify({ nonce: server.issueNonce() }) })
     const session: any = await bootstrap.json(), cookie = bootstrap.headers.get('set-cookie')!.split(';')[0]
@@ -304,5 +304,26 @@ test('gestión: retirar LoRA conserva base y biblioteca; retirar base compartida
   const finalPlan:any=await(await ctx.call('/catalog/storage/plan','POST',{id:base.id})).json()
   expect((await ctx.call('/catalog/storage/remove','POST',{id:base.id,revision:finalPlan.revision,acceptShared:true})).status).toBe(200)
   expect((await ctx.json('/catalog/storage')).files).toHaveLength(0)
+ }finally{await ctx.cleanup()}
+})
+
+test('SDXL: receta propia, memoria reducida, dimensiones reales y rechazo de recetas cruzadas',async()=>{
+ const ctx=await setup(true,false,true)
+ try{
+  await ctx.call('/settings','PATCH',{engineBinding:ctx.binding})
+  const catalog=await ctx.json('/catalog'), configuration=catalog.configurations.find((item:any)=>item.id==='fixture-xl-balanced').configuration
+  expect(configuration.recipe).toBe('sdxl-text-to-image-v1')
+  expect((await ctx.call('/catalog/adopt','POST',{repository:'fixture/test',file:'style.safetensors',baseModelId:'fixture-xl'})).status).toBe(409)
+  expect((await ctx.call('/catalog/configurations','POST',{...configuration,modelId:ctx.fixture.profile.id})).status).toBe(400)
+  expect((await ctx.call('/catalog/configurations','POST',{...configuration,recipe:'sd15-text-to-image-v1'})).status).toBe(400)
+  await ctx.call('/catalog/select','POST',{configurationId:'fixture-xl-balanced'})
+  const plan=await ctx.json('/creation/plan');expect(plan.canPrepare).toBe(true)
+  await ctx.call('/creation/prepare','POST',{revision:plan.revision,acceptLicense:true})
+  await waitFor(()=>ctx.json('/creation'),state=>state.canCreate)
+  expect(ctx.fixture.memoryModes.at(-1)).toBe('lowvram')
+  const job:any=await(await ctx.call('/jobs','POST',{requestId:crypto.randomUUID(),prompt:'SDXL fixture',format:'landscape'})).json()
+  expect(job.width).toBe(768);expect(job.height).toBe(576)
+  await waitFor(()=>ctx.json('/jobs/'+job.id),value=>value.status==='completed')
+  expect(ctx.fixture.submissions.at(-1).prompt['4'].inputs.width).toBe(768)
  }finally{await ctx.cleanup()}
 })

@@ -44,7 +44,7 @@ export async function engineJson(origin: string, path: string, body?: unknown, s
 export interface ImageEngine {
   readonly origin: string | null
   readonly version: string | null
-  start(binding: NonNullable<Settings['engineBinding']>, modelsDirectory: string, checkpoint: string, signal: AbortSignal): Promise<void>
+  start(binding: NonNullable<Settings['engineBinding']>, modelsDirectory: string, checkpoint: string, signal: AbortSignal, memoryMode?: 'lowvram'): Promise<void>
   stop(): Promise<void>
 }
 type EngineOptions = { folder?: string; requiredNodes?: readonly string[]; validateNodes?: (nodes: any) => void }
@@ -54,15 +54,15 @@ export class LocalImageEngine implements ImageEngine {
   private child: ChildProcess | null = null
   private starting: Promise<void> | null = null
   constructor(private dataDir: string, private options: EngineOptions = {}) {}
-  async start(binding: NonNullable<Settings['engineBinding']>, modelsDirectory: string, checkpoint: string, signal: AbortSignal) {
+  async start(binding: NonNullable<Settings['engineBinding']>, modelsDirectory: string, checkpoint: string, signal: AbortSignal, memoryMode?: 'lowvram') {
     if (this.origin) {
       try { await engineJson(this.origin, '/system_stats', undefined, signal); return } catch { await this.stop() }
     }
     if (this.starting) return this.starting
-    this.starting = this.launch(binding, modelsDirectory, checkpoint, signal).finally(() => { this.starting = null })
+    this.starting = this.launch(binding, modelsDirectory, checkpoint, signal, memoryMode).finally(() => { this.starting = null })
     return this.starting
   }
-  private async launch(value: NonNullable<Settings['engineBinding']>, modelsDirectory: string, checkpoint: string, signal: AbortSignal) {
+  private async launch(value: NonNullable<Settings['engineBinding']>, modelsDirectory: string, checkpoint: string, signal: AbortSignal, memoryMode?: 'lowvram') {
     const binding = await validateEngineBinding(value)
     const runtime = join(this.dataDir, this.options.folder || 'image-engine')
     for (const folder of ['user', 'input', 'output', 'temp']) await mkdir(join(runtime, folder), { recursive: true, mode: 0o700 })
@@ -79,7 +79,7 @@ export class LocalImageEngine implements ImageEngine {
       if (home && isAbsolute(home)) env.PATH = [home, join(home, 'Library', 'bin'), join(home, 'DLLs'), dirname(binding.python), process.env.PATH].filter(Boolean).join(';')
     }
     const port = await freePort(), origin = `http://127.0.0.1:${port}`
-    const child = spawn(binding.python, ['-B', bootstrap, String(process.pid), join(binding.directory, 'main.py'), '--listen', '127.0.0.1', '--port', String(port), '--disable-auto-launch', '--disable-all-custom-nodes', '--extra-model-paths-config', config, '--user-directory', join(runtime, 'user'), '--input-directory', join(runtime, 'input'), '--output-directory', join(runtime, 'output'), '--temp-directory', join(runtime, 'temp'), '--database-url', 'sqlite:///:memory:'], { cwd: binding.directory, env, shell: false, windowsHide: true, detached: process.platform !== 'win32', stdio: ['ignore', 'pipe', 'pipe'] })
+    const child = spawn(binding.python, ['-B', bootstrap, String(process.pid), join(binding.directory, 'main.py'), '--listen', '127.0.0.1', '--port', String(port), '--disable-auto-launch', ...(memoryMode==='lowvram'?['--lowvram']:[]), '--disable-all-custom-nodes', '--extra-model-paths-config', config, '--user-directory', join(runtime, 'user'), '--input-directory', join(runtime, 'input'), '--output-directory', join(runtime, 'output'), '--temp-directory', join(runtime, 'temp'), '--database-url', 'sqlite:///:memory:'], { cwd: binding.directory, env, shell: false, windowsHide: true, detached: process.platform !== 'win32', stdio: ['ignore', 'pipe', 'pipe'] })
     this.child = child
     const log = createWriteStream(join(runtime, 'engine.log'), { flags: 'a', mode: 0o600 })
     child.stdout?.on('data', data => log.write(data)); child.stderr?.on('data', data => log.write(data))

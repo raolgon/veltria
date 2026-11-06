@@ -25,6 +25,7 @@ export class CreationFixture {
   submissions: any[] = []
   cancellations: string[] = []
   complete = true
+  memoryModes: (string|undefined)[] = []
   failure = false
   wrongHash = false
   ignoreRange = false
@@ -74,7 +75,7 @@ export class CreationFixture {
     } })
     const fixture = this
     this.profile = { ...starterProfile, id: 'fixture-profile', title: 'Perfil de prueba · sin GPU', bytes: this.bytes.length, sha256: createHash('sha256').update(this.bytes).digest('hex'), filename: 'fixture-only.safetensors', url: `http://127.0.0.1:${this.server.port}/checkpoint`, description: 'Fixture de pruebas, no un perfil distribuido.' }
-    this.engine = { origin: null, version: 'fixture-no-GPU', async start() { (this as any).origin = `http://127.0.0.1:${fixture.server.port}` }, async stop() { (this as any).origin = null } }
+    this.engine = { origin: null, version: 'fixture-no-GPU', async start(...args: any[]) { fixture.memoryModes.push(args[4]); (this as any).origin = `http://127.0.0.1:${fixture.server.port}` }, async stop() { (this as any).origin = null } }
   }
   async binding(directory: string): Promise<NonNullable<Settings['engineBinding']>> {
     const root = join(directory, 'existing engine fixture'); await mkdir(join(root, 'comfy'), { recursive: true })

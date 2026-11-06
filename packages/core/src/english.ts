@@ -734,5 +734,18 @@ export const english: Readonly<Record<string, string>> = {
   "Veltria 0.7 · Creación local": "Veltria 0.7 · Local creation",
   "Adaptación (LoRA)": "Adaptation (LoRA)",
   "Cancelar": "Cancel",
-  "Modelo": "Model"
+  "Modelo": "Model",
+  "SDXL sólo está habilitado en Windows y Linux; macOS está pendiente.": "SDXL is enabled on Windows and Linux only; macOS is pending.",
+  "Este perfil SDXL requiere al menos 6 GB de VRAM y 16 GB de RAM nominales; no está verificado para equipos menores.": "This SDXL profile requires at least 6 GB VRAM and 16 GB nominal RAM; smaller systems are unverified.",
+  "SDXL usa un perfil de 768 píxeles y descarga parcial de memoria a RAM. Cierra otras aplicaciones antes de preparar; la ejecución se comprobará con una imagen real.": "SDXL uses 768-pixel settings and partial offloading to RAM. Close other applications before preparing; a real image will test execution.",
+  "Una familia posterior a SD 1.5 para explorar composiciones y más detalle. Perfil inicial conservador para 6 GB.": "A family released after SD 1.5 for exploring compositions and detail. Conservative starting settings for 6 GB.",
+  "SDXL sin refiner, con nodos estándar y modo de memoria reducido. No modifica tu instalación de ComfyUI.": "SDXL without a refiner, using standard nodes and reduced-memory mode. Your ComfyUI installation is not modified.",
+  "La resolución inicial de 768 píxeles reduce el trabajo respecto al formato nativo de 1024. No se prometen tiempos ni calidad superior en todas las escenas.": "The initial 768-pixel resolution reduces work compared with native 1024. No timings or better quality in every scene are promised.",
+  "LoRA de SD 1.5 no compatibles con esta familia. LoRA de SDXL y otras variantes: pendientes.": "SD 1.5 LoRA are incompatible with this family. SDXL LoRA and other variants are pending.",
+  "El punto de partida de SDXL: imágenes de 768 píxeles.": "SDXL starting settings: 768-pixel images.",
+  "Para explorar SDXL con ajustes conservadores para 6 GB.": "Explore SDXL with conservative settings for 6 GB.",
+  "La receta no corresponde a la familia del modelo.": "The recipe does not match the model family.",
+  "Con ajustes de memoria · ejecución por comprobar": "Memory adjustments · execution untested",
+  "0.8 / SDXL LOCAL": "0.8 / LOCAL SDXL",
+  "Veltria 0.8 · Creación local": "Veltria 0.8 · Local creation"
 }

@@ -5,7 +5,7 @@ import { imageFormatSchema, imageProfileSchema, recommendationSchema } from './c
 export const imageConfigurationSchema = z.object({
   kind: z.literal('veltria-image-configuration'), version: z.literal(1),
   name: z.string().trim().min(1).max(80), description: z.string().trim().max(280),
-  modelId: z.string().regex(/^[a-z0-9-]{1,80}$/), recipe: z.literal('sd15-text-to-image-v1'),
+  modelId: z.string().regex(/^[a-z0-9-]{1,80}$/), recipe: z.enum(['sd15-text-to-image-v1','sdxl-text-to-image-v1']),
   parameters: z.object({ steps: z.number().int().min(8).max(40), cfg: z.number().min(1).max(12), sampler: z.literal('euler'), scheduler: z.literal('normal'), format: imageFormatSchema }).strict()
 }).strict()
 export type ImageConfiguration = z.infer<typeof imageConfigurationSchema>

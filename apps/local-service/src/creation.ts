@@ -5,7 +5,7 @@ import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { createWriteStream } from 'node:fs'
 import { creationStateSchema, preparationPlanSchema, type CreationState, type Preparation, type PreparationPlan, type ImageJob, type Settings, type Hardware, type Catalog, type ConfigurationEntry, imageConfigurationSchema } from '@veltria/contracts'
-import { recommendImage, dimensions, imageWorkflow, type ImageProfile, imageModels, configurationsFor, configurationRevision } from '@veltria/core'
+import { recommendImage, profileDimensions, imageWorkflow, type ImageProfile, imageModels, configurationsFor, configurationRevision } from '@veltria/core'
 import { detectHardware, SettingsRepository } from '@veltria/adapters'
 import { downloadProfileFile, finishProfileFile, fileBytes } from '../../../packages/adapters/src/profile-download'
 import { LocalImageEngine, engineJson, type ImageEngine } from '../../../packages/adapters/src/image-engine'
@@ -44,7 +44,7 @@ export class CreationController {
   private discoveredModels(): ImageProfile[] { return (this.options.repository.db.query('SELECT data FROM discovered_models').all() as {data:string}[]).map(row => JSON.parse(row.data)) }
   async adoptModel(repo: string, file: string, strength = 0.7, baseModelId = 'sd15-starter') {
     this.assertConfigurationMutable()
-    if (!this.models.some(model => model.id === baseModelId && !model.adaptation)) throw new CreationError('No se encontró un modelo base compatible.')
+    if (!this.models.some(model => model.id === baseModelId && !model.adaptation && model.family!=='sdxl')) throw new CreationError('No se encontró un modelo base compatible.')
     const profile = await resolveModel(repo, file, strength, baseModelId)
     this.assertConfigurationMutable()
     if (this.discoveredModels().length >= 100 && !this.models.some(model => model.id === profile.id)) throw new CreationError('El catálogo admite hasta 100 modelos añadidos.')
@@ -62,6 +62,8 @@ export class CreationController {
   importConfiguration(value: unknown) {
     const configuration = imageConfigurationSchema.parse(value)
     if (!this.models.some(model => model.id === configuration.modelId)) throw new CreationError('Esta configuración necesita un modelo que todavía no admite Veltria.', 400)
+    const model=this.models.find(item=>item.id===configuration.modelId)!
+    if(configuration.recipe !== (model.family==='sdxl'?'sdxl-text-to-image-v1':'sd15-text-to-image-v1')) throw new CreationError('La receta no corresponde a la familia del modelo.',400)
     const entry: ConfigurationEntry = { id: `imported-${digest(configuration)}`, configuration, origin: 'imported' }
     if (this.store.configurations().length >= 100 && !this.store.configurations().some(item => item.id === entry.id)) throw new CreationError('Ya hay 100 configuraciones importadas. No se ha añadido otra.', 409)
     this.store.saveConfiguration(entry); this.options.changed('creation'); return entry
@@ -86,7 +88,7 @@ export class CreationController {
       const size = await fileBytes(destination).catch(() => 0), partial = await fileBytes(`${destination}.part`).catch(() => 0)
       const preparation = profile.id === selected ? this.preparation : this.store.preparation(profile.id)
       const prepared = preparation?.status === 'ready' && preparation.verifiedHash === profile.sha256 && preparation.revision === this.revisionFor(profile) && size === profile.bytes
-      const recommendation = profile.id === selected ? state.recommendation : { ...recommendImage(await this.hardware()), verified: false, evidence: null }
+      const recommendation = profile.id === selected ? state.recommendation : { ...recommendImage(await this.hardware(), profile), verified: false, evidence: null }
       const remainingBytes = (await this.componentBytes(profile)).reduce((sum, item) => sum + item.profile.bytes - item.received, 0)
       return { profile, remainingBytes, received: size === profile.bytes ? size : Math.min(partial, profile.bytes), status: prepared ? 'prepared' as const : size === profile.bytes ? 'downloaded' as const : partial ? 'partial' as const : 'missing' as const, recommendation }
     }))
@@ -155,8 +157,9 @@ export class CreationController {
     const version = binding ? await readFile(join(binding.directory, 'comfyui_version.py'), 'utf8').catch(() => '') : ''
     return digest({ platform: hardware.platform, arch: hardware.arch, cpu: hardware.cpu.name, ram: hardware.ram.total, gpu: hardware.gpus.map(gpu => [gpu.name, gpu.vramTotal, gpu.driver]), binding, version, profile: this.profile.revision, ...(this.configuration.configuration.parameters.steps === this.profile.steps && this.configuration.configuration.parameters.cfg === 7 ? {} : { configuration: configurationRevision(this.configuration.configuration) }) })
   }
+  async discoveryRecommendation() { return recommendImage(await this.hardware()) }
   async state(): Promise<CreationState> {
-    const hardware = await this.hardware(), recommendation = recommendImage(hardware), evidence = this.store.evidence(this.profile.id)
+    const hardware = await this.hardware(), recommendation = recommendImage(hardware,this.profile), evidence = this.store.evidence(this.profile.id)
     const verified = !!evidence && evidence.hardwareKey === await this.hardwareKey()
     const bound = !!this.options.repository.get().engineBinding
     let ready = false
@@ -170,7 +173,7 @@ export class CreationController {
     const total = components.reduce((sum, item) => sum + item.profile.bytes, 0)
     const received = components.reduce((sum, item) => sum + item.received, 0)
     const remaining = total - received, available = await (this.options.disk ? this.options.disk(dirname(destination)) : diskAvailable(dirname(destination))), required = remaining + 512 * 1024 ** 2
-    const recommendation = recommendImage(await this.hardware()), blockers: string[] = []
+    const recommendation = recommendImage(await this.hardware(),this.profile), blockers: string[] = []
     if (!binding) blockers.push('Falta vincular la carpeta y el Python del motor existente en Mi equipo. No se instalará un segundo motor.')
     if (['unknown', 'unsupported'].includes(recommendation.level)) blockers.push(recommendation.reason)
     if (available === null) blockers.push('No se pudo comprobar el espacio de esta ubicación. Elige otra carpeta accesible.')
@@ -231,7 +234,7 @@ export class CreationController {
     if (!binding) throw new CreationError('Falta vincular el motor existente en Mi equipo.')
     if (!this.engine.origin) {
       this.setPreparation({ status: 'starting', message: 'Abriendo el motor existente y comprobando el perfil. No se están instalando componentes.' })
-      try { await this.engine.start(binding, this.modelsDirectory(), this.components()[0].filename, signal) }
+      try { await this.engine.start(binding, this.modelsDirectory(), this.components()[0].filename, signal, this.profile.family==='sdxl'?'lowvram':undefined) }
       catch (error) { this.setPreparation({ status: 'error', message: error instanceof Error ? error.message : 'No se pudo abrir el motor existente.' }); throw error }
       this.setPreparation({ status: 'ready', message: 'El perfil está preparado para crear.' })
     }
@@ -252,7 +255,7 @@ export class CreationController {
     // Recheck after async preflight: two clients may send the same id concurrently.
     const raced = this.store.byRequest(input.requestId)
     if (raced) { if (raced.prompt !== input.prompt || raced.format !== input.format) throw new CreationError('Ese identificador ya pertenece a otra creación.'); return raced }
-    const [width, height] = dimensions[input.format]
+    const [width, height] = profileDimensions(input.format,this.profile)
     const job: ImageJob = { id: crypto.randomUUID(), ...input, profileId: this.profile.id, status: 'queued', seed: randomBytes(4).readUInt32LE(), width, height, configurationId: this.configuration.id, configurationName: this.configuration.configuration.name, configurationOrigin: this.configuration.origin, configurationRevision: configurationRevision(this.configuration.configuration), cfg: this.configuration.configuration.parameters.cfg, sampler: 'euler', scheduler: 'normal', steps: this.configuration.configuration.parameters.steps, step: null, enginePromptId: null, engineUrl: null, createdAt: now(), updatedAt: now(), message: 'En espera de crear tu imagen.', imageId: null, engineVersion: null, profileRevision: this.profile.revision }
     this.saveJob(job); this.schedule(); return job
   }
