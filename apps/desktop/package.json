@@ -1,6 +1,6 @@
 {
   "name": "veltria-desktop",
-  "version": "0.6.2",
+  "version": "0.7.0",
   "private": true,
   "main": "dist/main.cjs",
   "description": "Veltria \u2014 espacio creativo local",

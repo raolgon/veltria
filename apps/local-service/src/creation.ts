@@ -10,6 +10,7 @@ import { detectHardware, SettingsRepository } from '@veltria/adapters'
 import { downloadProfileFile, finishProfileFile, fileBytes } from '../../../packages/adapters/src/profile-download'
 import { LocalImageEngine, engineJson, type ImageEngine } from '../../../packages/adapters/src/image-engine'
 import { resolveModel } from './discovery'
+import { ModelStorage } from './model-storage'
 import { CreationStore } from './creation-store'
 
 export class CreationError extends Error { constructor(message: string, readonly statusCode = 409) { super(message); this.name = 'CreationError' } }
@@ -89,7 +90,7 @@ export class CreationController {
       const remainingBytes = (await this.componentBytes(profile)).reduce((sum, item) => sum + item.profile.bytes - item.received, 0)
       return { profile, remainingBytes, received: size === profile.bytes ? size : Math.min(partial, profile.bytes), status: prepared ? 'prepared' as const : size === profile.bytes ? 'downloaded' as const : partial ? 'partial' as const : 'missing' as const, recommendation }
     }))
-    return { models, configurations: this.configurations(), selectedModelId: selected, selectedConfigurationId: this.configuration.id, busy: this.startingPrepare || this.activity().preparing || this.activity().jobs > 0 }
+    return { models, configurations: this.configurations(), selectedModelId: selected, selectedConfigurationId: this.configuration.id, busy: this.managingFiles || this.startingPrepare || this.activity().preparing || this.activity().jobs > 0 }
   }
   private engine: ImageEngine
   private preparation!: Preparation
@@ -97,6 +98,7 @@ export class CreationController {
   private preparationAbort: AbortController | null = null
   private generationTask: Promise<void> | null = null
   private generationAbort: AbortController | null = null
+  private managingFiles = false
   private startingPrepare = false
   private closing = false
   private hardwareCache: { value: Hardware; at: number } | null = null
@@ -112,6 +114,28 @@ export class CreationController {
   }
   private idle(): Preparation { return { id: crypto.randomUUID(), profileId: this.profile.id, revision: '', status: 'idle', received: 0, total: this.components().reduce((sum, item) => sum + item.bytes, 0), message: 'Este perfil todavía no se ha preparado.', updatedAt: now(), checkpoint: null, verifiedHash: null } }
   private modelsDirectory() { return this.options.repository.get().modelsDirectory || join(this.options.dataDir, 'models') }
+  private storageManager() { return new ModelStorage(this.modelsDirectory(),this.options.repository.get().engineBinding?.directory || null,this.models.flatMap(profile=>this.components(profile).map(component=>({path:this.componentPath(component),bytes:component.bytes,sha256:component.sha256,kind:component.adaptation?'lora' as const:'checkpoint' as const,profile:{id:profile.id,name:profile.model,configurationId:profile.id===this.profile.id?this.configuration.id:configurationsFor(profile)[0].id}})))) }
+  private assertStorageMutable() {
+    this.assertConfigurationMutable()
+    if(this.engine.origin && this.store.jobs(0,10000).some(job=>job.status==='interrupted'&&job.engineUrl===this.engine.origin)) throw new CreationError('Espera a que termine la operación actual.')
+  }
+  storage() { return this.storageManager().inventory(this.managingFiles || this.startingPrepare || this.activity().preparing || this.activity().jobs>0) }
+  async removalPlan(id:string) { this.assertStorageMutable(); try{return await this.storageManager().plan(id)}catch(error){throw new CreationError(error instanceof Error?error.message:'Actualiza la lista de archivos.')} }
+  async removeFile(id:string,revision:string,acceptShared:boolean) {
+    this.assertStorageMutable(); this.managingFiles=true; this.options.changed('creation')
+    try {
+      await this.engine.stop()
+      const removed=await this.storageManager().remove(id,revision,acceptShared)
+      for(const affected of removed.profiles) {
+        const profile=this.models.find(item=>item.id===affected.id)!
+        const previous=this.store.preparation(profile.id)
+        if(previous)this.store.savePreparation({...previous,revision:'',status:'idle',received:0,verifiedHash:null,checkpoint:null,updatedAt:now(),message:'Se retiró un archivo del perfil. Puedes prepararlo de nuevo; tus creaciones se conservan.'})
+      }
+      this.restorePreparation(); this.options.changed('creation')
+      return await this.storageManager().inventory(false)
+    } catch(error) { throw new CreationError(error instanceof Error?error.message:'No se pudo retirar el archivo. Actualiza la lista.') }
+    finally {this.managingFiles=false;this.options.changed('creation')}
+  }
   private components(profile = this.profile): ImageProfile[] { return profile.adaptation ? [this.models.find(model => model.id === profile.adaptation!.base)!, profile] : [profile] }
   private componentPath(profile: ImageProfile) { return join(this.modelsDirectory(), profile.adaptation ? 'loras' : 'checkpoints', profile.filename) }
   private destination() { return this.componentPath(this.profile) }
@@ -138,7 +162,7 @@ export class CreationController {
     let ready = false
     try { ready = this.preparation.status === 'ready' && this.preparation.revision === this.revision() && this.preparation.verifiedHash === this.profile.sha256 && await fileBytes(this.destination()) === this.profile.bytes }
     catch { this.setPreparation({ status: 'error', message: 'La ubicación del perfil cambió y no se puede comprobar. Elige una carpeta accesible para volver a prepararlo.' }) }
-    return creationStateSchema.parse({ configuration: { id: this.configuration.id, name: this.configuration.configuration.name, origin: this.configuration.origin, ...this.configuration.configuration.parameters }, profile: this.profile, recommendation: { ...recommendation, verified, evidenceDetails: verified ? { at: evidence!.at, width: evidence!.width, height: evidence!.height } : null, evidence: verified ? `Primera creación comprobada en este equipo: ${evidence!.width} × ${evidence!.height}, ${new Date(evidence!.at).toLocaleString('es')}.` : null }, preparation: this.preparation, activeJob: this.store.jobs(0, 10000).find(job => !terminal(job)) || null, bound, engineRunning: !!this.engine.origin, canCreate: ready && bound && ['recommended', 'limited'].includes(recommendation.level) })
+    return creationStateSchema.parse({ configuration: { id: this.configuration.id, name: this.configuration.configuration.name, origin: this.configuration.origin, ...this.configuration.configuration.parameters }, profile: this.profile, recommendation: { ...recommendation, verified, evidenceDetails: verified ? { at: evidence!.at, width: evidence!.width, height: evidence!.height } : null, evidence: verified ? `Primera creación comprobada en este equipo: ${evidence!.width} × ${evidence!.height}, ${new Date(evidence!.at).toLocaleString('es')}.` : null }, preparation: this.preparation, activeJob: this.store.jobs(0, 10000).find(job => !terminal(job)) || null, bound, engineRunning: !!this.engine.origin, canCreate: !this.managingFiles && ready && bound && ['recommended', 'limited'].includes(recommendation.level) })
   }
   async plan(binding = this.options.repository.get().engineBinding): Promise<PreparationPlan> {
     const destination = this.destination()
@@ -154,12 +178,12 @@ export class CreationController {
     if (components.some(item => item.size && item.size !== item.profile.bytes)) blockers.push('Ya existe un archivo distinto en el destino. Se conserva intacto; elige otra ubicación.')
     return preparationPlanSchema.parse({ revision: this.revisionFor(this.profile, binding), profileId: this.profile.id, destination, totalBytes: total, remainingBytes: remaining, requiredBytes: required, availableBytes: available, canPrepare: blockers.length === 0, blockers, changes: [...components.map(item => `Comprobar o descargar ${item.profile.model}: ${item.profile.bytes} bytes. SHA-256: ${item.profile.sha256}. Fuente: ${item.profile.source}. Licencia: ${item.profile.license} (${item.profile.licenseUrl}).`), 'Reutilizar tu Python y ComfyUI existentes, sin instalar dependencias ni modificar sus modelos.', 'Iniciar un proceso local supervisado con rutas propias de modelos, datos y resultados. No detener otras instancias.', 'Los nodos personalizados permanecen desactivados en este primer perfil. No se generará ninguna imagen hasta pulsar Crear.'], license: this.profile.license, licenseUrl: this.profile.licenseUrl, source: this.profile.source, reuseBytes: received })
   }
-  assertConfigurationMutable() { if (this.startingPrepare || this.preparationTask || this.generationTask || this.store.jobs(0, 10000).some(job => !terminal(job))) throw new CreationError('Hay una preparación o creación activa. Termínala o cancélala antes de cambiar el motor o la ubicación.') }
+  assertConfigurationMutable() { if (this.managingFiles || this.startingPrepare || this.preparationTask || this.generationTask || this.store.jobs(0, 10000).some(job => !terminal(job))) throw new CreationError('Hay una preparación o creación activa. Termínala o cancélala antes de cambiar el motor o la ubicación.') }
   async configurationChanged() { await this.engine.stop(); this.preparation = this.idle(); this.store.savePreparation(this.preparation); this.hardwareCache = null; this.options.changed('creation') }
   async prepare(revision: string): Promise<Preparation> {
     if (this.closing) throw new CreationError('El servicio está cerrando.')
     if (this.preparationTask) { if (revision === this.preparation.revision) return this.preparation; throw new CreationError('Ya hay una preparación activa.') }
-    if (this.startingPrepare || this.generationTask) throw new CreationError('Espera a que termine la operación actual.')
+    if (this.managingFiles || this.startingPrepare || this.generationTask) throw new CreationError('Espera a que termine la operación actual.')
     this.startingPrepare = true
     try {
       const plan = await this.plan()

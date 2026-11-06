@@ -1,3 +1,5 @@
+> Entrega actual: [Veltria 0.7, gestionar lo descargado](download-management.md).
+
 > Entrega actual: [Veltria 0.6.2, recomendaciones y fichas](catalog-guidance.md).
 
 > Entrega actual: [Veltria 0.6.1, explorar compatibles por popularidad](compatible-browsing.md).

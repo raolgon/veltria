@@ -5,7 +5,7 @@ import staticFiles from '@fastify/static'
 import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { ServerResponse } from 'node:http'
 import { z } from 'zod'
-import { protocol, settingsPatchSchema, sessionSchema, healthSchema, engineSchema, createImageSchema, prepareRequestSchema, creationStateSchema, preparationSchema, jobSchema, librarySchema, prepareVideoSchema, createVideoSchema, videoJobSchema, catalogSchema, catalogSelectionSchema, imageConfigurationSchema, setupScanSchema, setupPlanRequestSchema, setupPrepareSchema, setupStateSchema, setupPlanSchema } from '@veltria/contracts'
+import { protocol, settingsPatchSchema, sessionSchema, healthSchema, engineSchema, createImageSchema, prepareRequestSchema, creationStateSchema, preparationSchema, jobSchema, librarySchema, prepareVideoSchema, createVideoSchema, videoJobSchema, catalogSchema, catalogSelectionSchema, storageSchema, removalPlanSchema, removalRequestSchema, imageConfigurationSchema, setupScanSchema, setupPlanRequestSchema, setupPrepareSchema, setupStateSchema, setupPlanSchema } from '@veltria/contracts'
 import { SettingsRepository, detectHardware, probeComfy, initialEngine, ResourceMonitor } from '@veltria/adapters'
 import { join, isAbsolute } from 'node:path'
 import { createReadStream } from 'node:fs'
@@ -112,7 +112,7 @@ export async function createServer(options: Options) {
     return sessionSchema.parse({ csrf: session.csrf, settings: repository.get() })
   })
   app.get('/api/v1/session', async (request) => sessionSchema.parse({ csrf: sessions.get(request.cookies.veltria_session!)!.csrf, settings: repository.get() }))
-  app.get('/api/v1/health', async () => healthSchema.parse({ ...identity, version: '0.6.2', runtime: `Bun ${Bun.version}`, capabilities: { hardware: true, engineProbe: true, generation: true, preparation: true, video: true, lan: false } }))
+  app.get('/api/v1/health', async () => healthSchema.parse({ ...identity, version: '0.7.0', runtime: `Bun ${Bun.version}`, capabilities: { hardware: true, engineProbe: true, generation: true, preparation: true, video: true, lan: false } }))
   app.get('/api/v1/activity', async () => { const image = creation.activity(), movie = video.activity(); return { preparing: image.preparing || movie.preparing, jobs: image.jobs + movie.jobs } })
   app.get('/api/v1/settings', async () => repository.get())
   app.patch('/api/v1/settings', async request => serialized(async () => {
@@ -156,6 +156,9 @@ export async function createServer(options: Options) {
   })
   app.post('/api/v1/catalog/search', async request => { const input = discoverInput.parse(request.body); try { return await discover(input.query, input.kind) } catch (error) { throw new CreationError(error instanceof Error ? error.message : 'No se pudo consultar el proveedor.', 502) } })
   app.post('/api/v1/catalog/adopt', async request => serialized(async () => { const input = adoptInput.parse(request.body); try { return await creation.adoptModel(input.repository, input.file, input.strength, input.baseModelId) } catch (error) { if (error instanceof CreationError) throw error; throw new CreationError(error instanceof Error ? error.message : 'No se pudo comprobar el archivo.', 502) } }))
+  app.get('/api/v1/catalog/storage', async () => storageSchema.parse(await creation.storage()))
+  app.post('/api/v1/catalog/storage/plan', async request => serialized(async () => {video.assertMutable();const input=z.object({id:z.string().length(64)}).strict().parse(request.body);return removalPlanSchema.parse(await creation.removalPlan(input.id))}))
+  app.post('/api/v1/catalog/storage/remove', async request => serialized(async () => {video.assertMutable();const input=removalRequestSchema.parse(request.body);return storageSchema.parse(await creation.removeFile(input.id,input.revision,input.acceptShared))}))
   app.get('/api/v1/catalog', async () => catalogSchema.parse(await creation.catalog()))
   app.post('/api/v1/catalog/select', async request => serialized(async () => {
     const input = catalogSelectionSchema.parse(request.body)

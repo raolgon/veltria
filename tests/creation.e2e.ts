@@ -206,3 +206,27 @@ test('catálogo: guarda JSON, valida importación y usa la configuración en Cre
   await expect(entry).toContainText(configuration.name)
   await expect(entry).toContainText('CFG 4.5')
 })
+
+test('gestión de descarga real de fixture: revisar, cancelar, retirar y conservar la biblioteca',async({page})=>{
+ const origin=new URL(url).origin
+ const launch=await fetch(`${origin}/api/v1/control/launch`,{method:'POST',headers:{'content-type':'application/json','x-veltria-control':'a'.repeat(64)},body:'{}'}).then(r=>r.json()) as {nonce:string}
+ await page.goto(`${origin}/#launch=${launch.nonce}`)
+ await page.evaluate(async()=>{const s=await fetch('/api/v1/session').then(r=>r.json());await fetch('/api/v1/settings',{method:'PATCH',headers:{'content-type':'application/json','x-veltria-csrf':s.csrf},body:JSON.stringify({locale:'es'})})})
+ const before=await page.evaluate(()=>fetch('/api/v1/jobs').then(r=>r.json()))
+ await page.locator('.sidebar nav').getByRole('button',{name:'Modelos',exact:true}).click()
+ await page.getByRole('button',{name:'Gestionar descargas',exact:true}).click()
+ await expect(page.locator('.stored-file')).toHaveCount(1)
+ await page.locator('.stored-file').getByRole('button',{name:'Revisar retirada',exact:true}).click()
+ await expect(page.locator('.removal-review')).toBeVisible()
+ for(const [width,height]of [[1363,900],[320,568]]){await page.setViewportSize({width,height});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:`test-results/storage-${width}.png`,fullPage:true})}
+ await page.getByRole('button',{name:'Cancelar',exact:true}).click()
+ await expect(page.locator('.stored-file')).toHaveCount(1)
+ await page.locator('.stored-file').getByRole('button',{name:'Revisar retirada',exact:true}).click()
+ await page.getByRole('button',{name:'Retirar archivo',exact:true}).click()
+ await expect(page.locator('.stored-file')).toHaveCount(0)
+ await expect(page.getByText('Se retiró el archivo. Tus creaciones y configuraciones se conservan.',{exact:true})).toBeVisible()
+ const after=await page.evaluate(()=>fetch('/api/v1/jobs').then(r=>r.json()))
+ expect(after.total).toBe(before.total)
+ await page.getByRole('button',{name:'Volver al catálogo',exact:true}).click()
+ await expect(page.locator('.model-row').first()).toContainText('Sin descargar')
+})

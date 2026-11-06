@@ -278,3 +278,31 @@ test('LoRA: un plan prepara base y adaptación, reusa archivos y envía el conju
     expect(graph['5'].inputs.model).toEqual(['8', 0])
   } finally { await ctx.cleanup() }
 })
+
+test('gestión: retirar LoRA conserva base y biblioteca; retirar base compartida exige confirmación',async()=>{
+ const ctx=await setup(true,true)
+ try{
+  await ctx.call('/settings','PATCH',{engineBinding:ctx.binding})
+  await ctx.call('/catalog/select','POST',{configurationId:'fixture-lora-balanced'})
+  const prepare=await ctx.json('/creation/plan');await ctx.call('/creation/prepare','POST',{revision:prepare.revision,acceptLicense:true})
+  await waitFor(()=>ctx.json('/creation'),state=>state.canCreate)
+  const created:any=await(await ctx.call('/jobs','POST',{requestId:crypto.randomUUID(),prompt:'storage fixture',format:'square'})).json()
+  await waitFor(()=>ctx.json('/jobs/'+created.id),job=>job.status==='completed')
+  const completed=await ctx.json('/jobs/'+created.id)
+  const inventory=await ctx.json('/catalog/storage');expect(inventory.files).toHaveLength(2)
+  ctx.server.repository.db.query('UPDATE image_jobs SET data=? WHERE id=?').run(JSON.stringify({...completed,status:'interrupted'}),created.id)
+  expect((await ctx.call('/catalog/storage/plan','POST',{id:inventory.files[0].id})).status).toBe(409)
+  ctx.server.repository.db.query('UPDATE image_jobs SET data=? WHERE id=?').run(JSON.stringify(completed),created.id)
+  const base=inventory.files.find((item:any)=>item.kind==='checkpoint'),lora=inventory.files.find((item:any)=>item.kind==='lora')
+  const basePlan:any=await(await ctx.call('/catalog/storage/plan','POST',{id:base.id})).json()
+  expect((await ctx.call('/catalog/storage/remove','POST',{id:base.id,revision:basePlan.revision})).status).toBe(409)
+  const loraPlan:any=await(await ctx.call('/catalog/storage/plan','POST',{id:lora.id})).json()
+  expect((await ctx.call('/catalog/storage/remove','POST',{id:lora.id,revision:loraPlan.revision})).status).toBe(200)
+  const remaining=await ctx.json('/catalog/storage');expect(remaining.files).toHaveLength(1);expect(remaining.files[0].id).toBe(base.id)
+  expect((await ctx.json('/creation')).canCreate).toBe(false)
+  expect((await ctx.json('/jobs/'+created.id)).status).toBe('completed')
+  const finalPlan:any=await(await ctx.call('/catalog/storage/plan','POST',{id:base.id})).json()
+  expect((await ctx.call('/catalog/storage/remove','POST',{id:base.id,revision:finalPlan.revision,acceptShared:true})).status).toBe(200)
+  expect((await ctx.json('/catalog/storage')).files).toHaveLength(0)
+ }finally{await ctx.cleanup()}
+})

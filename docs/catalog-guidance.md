@@ -1,3 +1,5 @@
+> Entrega actual: [Veltria 0.7, gestionar lo descargado](download-management.md).
+
 # Elegir con una propuesta clara · 0.6.2
 
 En Modelos, **Recomendación de Veltria** prioriza opciones comprobadas con los ajustes elegidos, preparadas, descargadas y parcialmente descargadas, antes de opciones sin archivos locales. Es una recomendación para facilitar la preparación, no una puntuación de calidad visual ni un benchmark. La compatibilidad y la memoria disponible siguen procediendo del servicio local; no se estima VRAM a partir del tamaño del archivo.

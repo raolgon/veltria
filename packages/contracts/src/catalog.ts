@@ -22,3 +22,13 @@ export const catalogSelectionSchema = z.object({ configurationId: z.string().min
 export const discoveryResultSchema = z.object({ repository: z.string(), revision: z.string(), kind: z.enum(['model', 'lora']), downloads: z.number().nonnegative().nullable().optional(), family: z.string(), supported: z.boolean(), files: z.array(z.object({ name: z.string(), bytes: z.number() })), reason: z.string(), source: z.string().url() })
 export const discoverySchema = z.object({ results: z.array(discoveryResultSchema), partial: z.boolean(), nextCursor: z.string().nullable().optional(), hardwareReason: z.string().nullable().optional() })
 export type DiscoveryResult = z.infer<typeof discoveryResultSchema>
+
+export const storedFileSchema = z.object({
+  id: z.string().length(64), name: z.string(), path: z.string(), bytes: z.number().nonnegative(), expectedBytes: z.number().positive(),
+  kind: z.enum(['checkpoint', 'lora', 'partial']), profiles: z.array(z.object({id:z.string(),name:z.string(),configurationId:z.string()})),
+  protectedReason: z.string().nullable()
+})
+export const storageSchema = z.object({directory:z.string(),totalBytes:z.number(),partialBytes:z.number(),files:z.array(storedFileSchema),busy:z.boolean()})
+export const removalPlanSchema = z.object({file:storedFileSchema,revision:z.string().length(64),shared:z.boolean(),canRemove:z.boolean()})
+export const removalRequestSchema = z.object({id:z.string().length(64),revision:z.string().length(64),acceptShared:z.boolean().default(false)}).strict()
+export type StoredFile = z.infer<typeof storedFileSchema>

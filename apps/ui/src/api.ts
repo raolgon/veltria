@@ -1,9 +1,9 @@
 import { z } from 'zod'
-import { sessionSchema, settingsSchema, hardwareSchema, engineSchema, healthSchema, creationStateSchema, preparationPlanSchema, preparationSchema, jobSchema, librarySchema, resourcesSchema, type Settings, discoverySchema, catalogSchema, configurationEntrySchema, setupStateSchema, setupPlanSchema } from '@veltria/contracts'
+import { sessionSchema, settingsSchema, hardwareSchema, engineSchema, healthSchema, creationStateSchema, preparationPlanSchema, preparationSchema, jobSchema, librarySchema, resourcesSchema, type Settings, storageSchema, removalPlanSchema, discoverySchema, catalogSchema, configurationEntrySchema, setupStateSchema, setupPlanSchema } from '@veltria/contracts'
 import { videoPlanSchema, videoStateSchema, videoJobSchema, videoLibrarySchema } from '@veltria/contracts'
 let csrf = ''
 async function request<T>(path: string, schema: z.ZodType<T>, method = 'GET', body?: unknown): Promise<T> {
-  const response = await fetch(`/api/v1${path}`, { method, credentials: 'same-origin', headers: { ...(body !== undefined ? { 'content-type': 'application/json' } : {}), ...(method !== 'GET' ? { 'x-veltria-csrf': csrf } : {}) }, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(path.startsWith('/catalog/') ? 35_000 : path === '/hardware' ? 15_000 : path === '/resources' ? 4000 : 12_000) })
+  const response = await fetch(`/api/v1${path}`, { method, credentials: 'same-origin', headers: { ...(body !== undefined ? { 'content-type': 'application/json' } : {}), ...(method !== 'GET' ? { 'x-veltria-csrf': csrf } : {}) }, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(path === '/catalog/storage/remove' ? 120_000 : path.startsWith('/catalog/') ? 35_000 : path === '/hardware' ? 15_000 : path === '/resources' ? 4000 : 12_000) })
   if (!response.ok) {
     const detail = await response.json().catch(() => null)
     throw new Error(detail?.message || `El servicio respondió HTTP ${response.status}. Vuelve a intentarlo.`)
@@ -32,6 +32,9 @@ export const api = {
   browseCompatible: (kind: string, cursor?: string) => request('/catalog/browse', discoverySchema, 'POST', { kind, ...(cursor ? { cursor } : {}) }),
   discover: (query: string, kind = 'all') => request('/catalog/search', discoverySchema, 'POST', { query, kind }),
   adoptModel: (repository: string, file: string, strength = 0.7, baseModelId = 'sd15-starter') => request('/catalog/adopt', configurationEntrySchema, 'POST', { repository, file, strength, baseModelId }),
+  storage: () => request('/catalog/storage', storageSchema),
+  removalPlan: (id:string) => request('/catalog/storage/plan', removalPlanSchema, 'POST', {id}),
+  removeFile: (id:string, revision:string, acceptShared:boolean) => request('/catalog/storage/remove', storageSchema, 'POST', {id,revision,acceptShared}),
   catalog: () => request('/catalog', catalogSchema),
   selectConfiguration: (configurationId: string) => request('/catalog/select', creationStateSchema, 'POST', { configurationId }),
   importConfiguration: (configuration: unknown) => request('/catalog/configurations', configurationEntrySchema, 'POST', configuration),
