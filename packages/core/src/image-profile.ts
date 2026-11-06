@@ -45,3 +45,19 @@ export function imageWorkflow(checkpoint: string, prompt: string, width: number,
 }
 
 export function profileDimensions(format: 'square'|'landscape'|'portrait', profile?: Pick<ImageProfile,'family'>) { return profile?.family==='sdxl' ? ({square:[768,768],landscape:[768,576],portrait:[576,768]} as const)[format] : dimensions[format] }
+
+// These are Veltria's supported direct-generation bounds, not universal model limits.
+export function imageQualityLimits(profile?: Pick<ImageProfile, 'family'>) {
+  return profile?.family === 'sdxl'
+    ? { min: 512, max: 1536, sizes: [768, 1024, 1536], defaultSize: 768 }
+    : { min: 256, max: 1024, sizes: [512, 768, 1024], defaultSize: 512 }
+}
+export function qualityDimensions(size: number, format: 'square' | 'landscape' | 'portrait'): [number, number] {
+  const short = Math.round(size * 0.75 / 64) * 64
+  return format === 'square' ? [size, size] : format === 'landscape' ? [size, short] : [short, size]
+}
+export function validImageQuality(quality: { width: number; height: number; steps: number; cfg: number }, profile?: Pick<ImageProfile, 'family'>) {
+  const { min, max } = imageQualityLimits(profile)
+  return [quality.width, quality.height].every(value => Number.isInteger(value) && value >= min && value <= max && value % 64 === 0)
+    && Number.isInteger(quality.steps) && quality.steps >= 1 && quality.steps <= 60 && Number.isFinite(quality.cfg) && quality.cfg >= 1 && quality.cfg <= 15
+}

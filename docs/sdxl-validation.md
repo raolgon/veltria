@@ -1,3 +1,5 @@
+> Entrega actual: [Veltria 0.9, calidad de imagen a tu elección](image-quality.md).
+
 # Veltria 0.8 · SDXL local
 
 Fecha: 6 de noviembre de 2026. Rama `development`. Sin subagentes.

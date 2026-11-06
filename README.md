@@ -1,8 +1,10 @@
 # Veltria — web local y Electron
 
-## Versión actual: 0.8.0 · SDXL local
+## Versión actual: 0.9.0 · calidad de imagen a tu elección
 
-SDXL Base 1.0 está integrado con una configuración conservadora para NVIDIA de 6 GB y 16 GB de RAM: 768 px y descarga a RAM con `--lowvram`. Se descargó el checkpoint oficial con autorización, se verificó SHA-256 y se generó una imagen real de 768 × 768 en esta RTX 4050. La ficha distingue compatibilidad estimada y ejecución comprobada; no garantiza lo mismo en todos los equipos. [Evidencia, comandos y límites](docs/sdxl-validation.md).
+En **Crear → Calidad de imagen**, elige tamaño y esfuerzo de generación, o ajusta ancho, alto, pasos y CFG manualmente. Las opciones dependen de la familia seleccionada. Se muestra el tamaño real y se avisa al superar el punto de partida; el usuario puede intentarlo dentro de los límites de la receta. Más píxeles o pasos no garantizan un mejor resultado. Los ajustes de cada imagen se guardan en su trabajo sin cambiar la configuración del modelo. [Alcance y comprobaciones](docs/image-quality.md).
+
+SDXL Base 1.0 conserva su ajuste inicial de 768 px y `--lowvram`, junto a SD 1.5 y DreamShaper 8. [Prueba real anterior de SDXL](docs/sdxl-validation.md).
 
 En **Modelos → Gestionar descargas**, revisa archivos completos y parciales, tamaño, ubicación y perfiles compartidos. Puedes usarlos, continuar su preparación o revisar su retirada. Retirar un LoRA conserva la base; retirar un archivo compartido requiere confirmar los perfiles afectados. Creaciones y configuraciones se conservan.
 
@@ -22,21 +24,21 @@ Abrir en Windows PowerShell, después de cerrar la versión anterior:
 
 ```powershell
 Set-Location 'C:\Users\rafao\Downloads\veltria-codex\veltria'
-.\release\0.8.0\win-unpacked\Veltria.exe
+.\release\0.9.0\win-unpacked\Veltria.exe
 # Navegador:
-.\build\browser\0.8.0\veltria-web.exe
+.\build\browser\0.9.0\veltria-web.exe
 ```
 
 Linux / WSL con pantalla:
 
 ```bash
 cd '/mnt/c/Users/rafao/Downloads/veltria-codex/veltria'
-./release/0.8.0/linux-unpacked/veltria
+./release/0.9.0/linux-unpacked/veltria
 # Navegador:
-./build/browser/0.8.0/veltria-web
+./build/browser/0.9.0/veltria-web
 ```
 
-El lanzador web imprime el enlace autorizado. Conservar los ejecutables con sus recursos. El paquete usa **protocolo 7** y SQLite de trabajos **esquema 4**; conserva imagen, preferencias y biblioteca, y crea una copia antes de actualizar datos anteriores. No adjuntarse a servicios anteriores ni compartir SQLite entre Windows y Linux. Las entregas anteriores se conservaron en sus carpetas. Cerrar las versiones anteriores antes de abrir esta; las nuevas configuraciones SDXL requieren 0.8 y no se garantiza volver a una versión anterior con los mismos datos.
+El lanzador web imprime el enlace autorizado. Conservar los ejecutables con sus recursos. El paquete usa **protocolo 8** y SQLite de trabajos **esquema 4**; conserva imagen, preferencias y biblioteca, y crea una copia antes de actualizar datos anteriores. No adjuntarse a servicios anteriores ni compartir SQLite entre Windows y Linux. Las entregas anteriores se conservaron en sus carpetas. Cerrar las versiones anteriores antes de abrir esta; los nuevos controles de calidad requieren 0.9 y no se garantiza volver a una versión anterior con los mismos datos.
 
 Desarrollo con Bun 1.4.4 y Node 24.13.0:
 

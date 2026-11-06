@@ -5,7 +5,7 @@ export * from './resources'
 export * from './video'
 export * from './catalog'
 export * from './setup'
-export const protocol = 7 as const
+export const protocol = 8 as const
 export const development = { uiOrigin: 'http://127.0.0.1:43120', serviceOrigin: 'http://127.0.0.1:43121' } as const
 export const themeSchema = z.enum(['system', 'light', 'dark'])
 export const localeSchema = z.enum(['es', 'en'])

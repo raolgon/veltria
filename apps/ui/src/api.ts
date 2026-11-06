@@ -42,7 +42,7 @@ export const api = {
   plan: () => request('/creation/plan', preparationPlanSchema),
   prepare: (revision: string) => request('/creation/prepare', preparationSchema, 'POST', { revision, acceptLicense: true }),
   pause: () => request('/creation/pause', preparationSchema, 'POST', {}),
-  create: (input: { requestId: string; prompt: string; format: 'square' | 'landscape' | 'portrait' }) => request('/jobs', jobSchema, 'POST', input),
+  create: (input: import('@veltria/contracts').CreateImageInput) => request('/jobs', jobSchema, 'POST', input),
   jobs: (offset = 0) => request(`/jobs?offset=${offset}&limit=24`, librarySchema),
   cancel: (id: string) => request(`/jobs/${id}/cancel`, jobSchema, 'POST', {}),
   reconcile: (id: string) => request(`/jobs/${id}/reconcile`, jobSchema, 'POST', {}),

@@ -327,3 +327,32 @@ test('SDXL: receta propia, memoria reducida, dimensiones reales y rechazo de rec
   expect(ctx.fixture.submissions.at(-1).prompt['4'].inputs.width).toBe(768)
  }finally{await ctx.cleanup()}
 })
+
+test('calidad por imagen: límites por familia, envío real, idempotencia y persistencia sin cambiar la configuración', async () => {
+ const ctx = await setup(true, false, true)
+ try {
+  await ctx.call('/settings', 'PATCH', { engineBinding: ctx.binding })
+  const plan = await ctx.json('/creation/plan')
+  await ctx.call('/creation/prepare', 'POST', { revision: plan.revision, acceptLicense: true })
+  await waitFor(() => ctx.json('/creation'), state => state.canCreate)
+  const before = await ctx.json('/creation')
+  const input = { requestId: crypto.randomUUID(), prompt: 'custom quality fixture', format: 'landscape', quality: { width: 768, height: 512, steps: 30, cfg: 6.5 } }
+  for (const quality of [{ ...input.quality, width: 1280 }, { ...input.quality, height: 500 }, { ...input.quality, steps: 61 }, { ...input.quality, cfg: 16 }]) {
+   expect((await ctx.call('/jobs', 'POST', { ...input, requestId: crypto.randomUUID(), quality })).status).toBe(400)
+  }
+  const created = await (await ctx.call('/jobs', 'POST', input)).json() as any
+  expect(created).toMatchObject({ width: 768, height: 512, steps: 30, cfg: 6.5, requestedQuality: input.quality })
+  const completed = await waitFor(() => ctx.json('/jobs/' + created.id), job => job.status === 'completed')
+  expect(completed.requestedQuality).toEqual(input.quality)
+  const graph = ctx.fixture.submissions.at(-1).prompt
+  expect(graph['4'].inputs).toMatchObject({ width: 768, height: 512 })
+  expect(graph['5'].inputs).toMatchObject({ steps: 30, cfg: 6.5 })
+  expect((await (await ctx.call('/jobs', 'POST', input)).json() as any).id).toBe(created.id)
+  expect((await ctx.call('/jobs', 'POST', { ...input, quality: { ...input.quality, steps: 31 } })).status).toBe(409)
+  expect((await ctx.json('/creation')).configuration).toEqual(before.configuration)
+  expect((await ctx.json('/creation')).recommendation.verified).toBe(false)
+  await ctx.server.close()
+  const reopened = await ctx.create()
+  try { expect((await reopened.json('/jobs/' + created.id)).requestedQuality).toEqual(input.quality) } finally { await reopened.server.close() }
+ } finally { await ctx.cleanup() }
+})

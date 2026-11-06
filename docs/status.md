@@ -1,3 +1,5 @@
+> Entrega actual: [Veltria 0.9, calidad de imagen a tu elección](image-quality.md).
+
 > Entrega actual: [Veltria 0.8, SDXL local y prueba real en Windows](sdxl-validation.md).
 
 > Entrega actual: [Veltria 0.7, gestionar lo descargado](download-management.md).

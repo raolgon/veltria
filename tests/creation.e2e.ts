@@ -207,6 +207,41 @@ test('catálogo: guarda JSON, valida importación y usa la configuración en Cre
   await expect(entry).toContainText('CFG 4.5')
 })
 
+test('calidad: tamaño, pasos, CFG, límites y ajustes conservados al crear', async ({ page }) => {
+ const origin = new URL(url).origin
+ const launch = await fetch(`${origin}/api/v1/control/launch`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-veltria-control': 'a'.repeat(64) }, body: '{}' }).then(r => r.json()) as { nonce: string }
+ await page.goto(`${origin}/#launch=${launch.nonce}`)
+ await page.evaluate(async () => { const session = await fetch('/api/v1/session').then(r => r.json()); await fetch('/api/v1/settings', { method: 'PATCH', headers: { 'content-type': 'application/json', 'x-veltria-csrf': session.csrf }, body: JSON.stringify({ locale: 'en' }) }) })
+ await expect(page.getByLabel('Image size', { exact: true })).toBeVisible()
+ await page.getByRole('button', { name: 'Square', exact: true }).click()
+ await page.getByLabel('Image size', { exact: true }).selectOption('768')
+ await page.getByLabel('Generation effort').selectOption('30')
+ await page.getByText('Adjust manually', { exact: true }).click()
+ await page.getByLabel('CFG', { exact: true }).fill('6.5')
+ await page.getByLabel('Width (px)').fill('500')
+ await expect(page.getByRole('alert').filter({ hasText: 'Check the values' })).toBeVisible()
+ await page.getByLabel('Describe what you imagine').fill('A mountain lake, quality fixture')
+ await expect(page.getByRole('button', { name: 'Create image', exact: true }).first()).toBeDisabled()
+ await page.getByLabel('Width (px)').fill('768')
+ await expect(page.locator('.quality-summary')).toContainText('768 × 768 px · 30 steps · CFG 6.5')
+ for (const [width, height] of [[1363, 900], [320, 568]]) {
+  await page.setViewportSize({ width, height })
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await page.getByLabel('Width (px)').blur()
+  await page.evaluate(() => window.scrollTo(0, 0))
+  await page.screenshot({ path: `test-results/image-quality-${width}.png`, fullPage: true })
+ }
+ await page.setViewportSize({ width: 1363, height: 900 })
+ await page.reload()
+ await expect(page.locator('.quality-summary')).toContainText('768 × 768 px · 30 steps · CFG 6.5')
+ await page.getByRole('button', { name: 'Create image', exact: true }).first().click()
+ await expect(page.getByRole('link', { name: 'Save image', exact: true })).toBeVisible({ timeout: 15000 })
+ const job = await page.evaluate(() => fetch('/api/v1/jobs').then(r => r.json()).then(r => r.jobs[0]))
+ expect(job).toMatchObject({ width: 768, height: 768, steps: 30, cfg: 6.5 })
+ await page.getByRole('button', { name: 'Reset model settings' }).click()
+ await expect(page.locator('.quality-summary')).toContainText('512 × 512 px · 12 steps · CFG 4.5')
+})
+
 test('gestión de descarga real de fixture: revisar, cancelar, retirar y conservar la biblioteca',async({page})=>{
  const origin=new URL(url).origin
  const launch=await fetch(`${origin}/api/v1/control/launch`,{method:'POST',headers:{'content-type':'application/json','x-veltria-control':'a'.repeat(64)},body:'{}'}).then(r=>r.json()) as {nonce:string}

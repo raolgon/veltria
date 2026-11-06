@@ -8,17 +8,20 @@ export const preparationSchema = z.object({
   updatedAt: z.string(), checkpoint: z.string().nullable(), verifiedHash: z.string().nullable()
 })
 export type Preparation = z.infer<typeof preparationSchema>
+export const imageQualitySchema = z.object({ width: z.number().int().min(256).max(1536).multipleOf(64), height: z.number().int().min(256).max(1536).multipleOf(64), steps: z.number().int().min(1).max(60), cfg: z.number().min(1).max(15) }).strict()
+export type ImageQuality = z.infer<typeof imageQualitySchema>
 export const jobSchema = z.object({
   id: z.string().uuid(), requestId: z.string().uuid(), profileId: z.string(),
   status: z.enum(['queued', 'submitting', 'running', 'saving', 'completed', 'cancelled', 'failed', 'interrupted']),
   prompt: z.string(), format: imageFormatSchema, seed: z.number(), width: z.number(), height: z.number(),
   configurationId: z.string().optional(), configurationName: z.string().optional(), configurationOrigin: z.enum(['included', 'imported']).optional(), configurationRevision: z.string().optional(), cfg: z.number().optional(), sampler: z.literal('euler').optional(), scheduler: z.literal('normal').optional(),
-  steps: z.number(), step: z.number().nullable(), enginePromptId: z.string().nullable(), engineUrl: z.string().nullable(),
+  requestedQuality: imageQualitySchema.optional(), steps: z.number(), step: z.number().nullable(), enginePromptId: z.string().nullable(), engineUrl: z.string().nullable(),
   createdAt: z.string(), updatedAt: z.string(), message: z.string(), imageId: z.string().uuid().nullable(),
   engineVersion: z.string().nullable(), profileRevision: z.string()
 })
 export type ImageJob = z.infer<typeof jobSchema>
-export const createImageSchema = z.object({ requestId: z.string().uuid(), prompt: z.string().trim().min(1).max(4000), format: imageFormatSchema.default('square') }).strict()
+export const createImageSchema = z.object({ requestId: z.string().uuid(), prompt: z.string().trim().min(1).max(4000), format: imageFormatSchema.default('square'), quality: imageQualitySchema.optional() }).strict()
+export type CreateImageInput = z.infer<typeof createImageSchema>
 export const imageProfileSchema = z.object({
   family: z.enum(['sd15','sdxl']).optional(), id: z.string(), revision: z.string(), title: z.string(), description: z.string(), model: z.string(),
   source: z.string().url(), license: z.string(), licenseUrl: z.string().url(), bytes: z.number(),

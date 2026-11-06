@@ -4,8 +4,8 @@ import { join, dirname, resolve, isAbsolute } from 'node:path'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { createWriteStream } from 'node:fs'
-import { creationStateSchema, preparationPlanSchema, type CreationState, type Preparation, type PreparationPlan, type ImageJob, type Settings, type Hardware, type Catalog, type ConfigurationEntry, imageConfigurationSchema } from '@veltria/contracts'
-import { recommendImage, profileDimensions, imageWorkflow, type ImageProfile, imageModels, configurationsFor, configurationRevision } from '@veltria/core'
+import { creationStateSchema, preparationPlanSchema, type CreateImageInput, type CreationState, type Preparation, type PreparationPlan, type ImageJob, type Settings, type Hardware, type Catalog, type ConfigurationEntry, imageConfigurationSchema } from '@veltria/contracts'
+import { recommendImage, profileDimensions, validImageQuality, imageWorkflow, type ImageProfile, imageModels, configurationsFor, configurationRevision } from '@veltria/core'
 import { detectHardware, SettingsRepository } from '@veltria/adapters'
 import { downloadProfileFile, finishProfileFile, fileBytes } from '../../../packages/adapters/src/profile-download'
 import { LocalImageEngine, engineJson, type ImageEngine } from '../../../packages/adapters/src/image-engine'
@@ -243,10 +243,10 @@ export class CreationController {
         if (!nodes.LoraLoader) throw new CreationError('Falta el nodo LoraLoader en este motor. Los archivos se conservan.')
       }
   }
-  async create(input: { requestId: string; prompt: string; format: 'square' | 'landscape' | 'portrait' }): Promise<ImageJob> {
+  async create(input: CreateImageInput): Promise<ImageJob> {
     const previous = this.store.byRequest(input.requestId)
     if (previous) {
-      if (previous.prompt !== input.prompt || previous.format !== input.format) throw new CreationError('Ese identificador ya pertenece a otra creación.')
+      if (previous.prompt !== input.prompt || previous.format !== input.format || JSON.stringify(previous.requestedQuality) !== JSON.stringify(input.quality)) throw new CreationError('Ese identificador ya pertenece a otra creación.')
       return previous
     }
     const state = await this.state()
@@ -254,9 +254,12 @@ export class CreationController {
     if (this.store.jobs(0, 10000).filter(job => !terminal(job)).length >= 10) throw new CreationError('La cola está llena. Espera a que terminen algunas imágenes.')
     // Recheck after async preflight: two clients may send the same id concurrently.
     const raced = this.store.byRequest(input.requestId)
-    if (raced) { if (raced.prompt !== input.prompt || raced.format !== input.format) throw new CreationError('Ese identificador ya pertenece a otra creación.'); return raced }
-    const [width, height] = profileDimensions(input.format,this.profile)
-    const job: ImageJob = { id: crypto.randomUUID(), ...input, profileId: this.profile.id, status: 'queued', seed: randomBytes(4).readUInt32LE(), width, height, configurationId: this.configuration.id, configurationName: this.configuration.configuration.name, configurationOrigin: this.configuration.origin, configurationRevision: configurationRevision(this.configuration.configuration), cfg: this.configuration.configuration.parameters.cfg, sampler: 'euler', scheduler: 'normal', steps: this.configuration.configuration.parameters.steps, step: null, enginePromptId: null, engineUrl: null, createdAt: now(), updatedAt: now(), message: 'En espera de crear tu imagen.', imageId: null, engineVersion: null, profileRevision: this.profile.revision }
+    if (raced) { if (raced.prompt !== input.prompt || raced.format !== input.format || JSON.stringify(raced.requestedQuality) !== JSON.stringify(input.quality)) throw new CreationError('Ese identificador ya pertenece a otra creación.'); return raced }
+    const [defaultWidth, defaultHeight] = profileDimensions(input.format,this.profile)
+    const quality = input.quality ?? { width: defaultWidth, height: defaultHeight, steps: this.configuration.configuration.parameters.steps, cfg: this.configuration.configuration.parameters.cfg }
+    if (!validImageQuality(quality, this.profile)) throw new CreationError('Estos ajustes superan los límites admitidos por Veltria para este modelo. Revisa tamaño, pasos y CFG.', 400)
+    const { width, height, steps, cfg } = quality
+    const job: ImageJob = { id: crypto.randomUUID(), requestId: input.requestId, prompt: input.prompt, format: input.format, ...(input.quality ? { requestedQuality: input.quality } : {}), profileId: this.profile.id, status: 'queued', seed: randomBytes(4).readUInt32LE(), width, height, configurationId: this.configuration.id, configurationName: this.configuration.configuration.name, configurationOrigin: this.configuration.origin, configurationRevision: configurationRevision(this.configuration.configuration), cfg, sampler: 'euler', scheduler: 'normal', steps, step: null, enginePromptId: null, engineUrl: null, createdAt: now(), updatedAt: now(), message: 'En espera de crear tu imagen.', imageId: null, engineVersion: null, profileRevision: this.profile.revision }
     this.saveJob(job); this.schedule(); return job
   }
   private schedule() {
@@ -315,7 +318,7 @@ export class CreationController {
             update({ status: 'saving', message: 'Guardando tu imagen en la biblioteca…' })
             const imageId = await this.saveResult(origin, image, job, signal)
             update({ status: 'completed', imageId, step: job.steps, message: 'Imagen creada y guardada en tu biblioteca.' })
-            this.store.saveEvidence(this.profile.id, { hardwareKey: await this.hardwareKey(), engineVersion: this.engine.version || 'no informada', width: job.width, height: job.height, at: now() })
+            if (job.steps === this.configuration.configuration.parameters.steps && job.cfg === this.configuration.configuration.parameters.cfg) this.store.saveEvidence(this.profile.id, { hardwareKey: await this.hardwareKey(), engineVersion: this.engine.version || 'no informada', width: job.width, height: job.height, at: now() })
             this.options.changed('creation'); return
           }
         }

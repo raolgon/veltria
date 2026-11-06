@@ -1,12 +1,14 @@
-// Opt-in: a real public SD 1.5 LoRA download and one GPU image. Isolated from the normal library.
+// Opt-in: one SDXL GPU image using an existing checkpoint. Isolated from the normal library.
 const fs = require('node:fs/promises'), path = require('node:path'), {spawn} = require('node:child_process'), {randomUUID} = require('node:crypto');
 const assert = require('node:assert/strict');
 const root = path.resolve(__dirname, '..'), {version} = require(path.join(root, 'package.json'));
 const {chromium} = require(path.join(root,'node_modules/.bun/playwright-core@1.64.1/node_modules/playwright-core'));
 assert.equal(process.platform,'win32'); assert.ok(process.argv[2] && path.isAbsolute(process.argv[2]));
-const stamp = 'sdxl-real-' + Date.now() + '-' + randomUUID().slice(0,8);
+const customQuality = process.argv.includes('--custom-quality');
+const expectedQuality = customQuality ? { width: 1024, height: 1024, steps: 24, cfg: 6.5 } : { width: 768, height: 768, steps: 20, cfg: 7 };
+const stamp = (customQuality ? 'image-quality-real-' : 'sdxl-real-') + Date.now() + '-' + randomUUID().slice(0,8);
 const data = path.join(process.env.LOCALAPPDATA,'Veltria',stamp), models = process.argv[2];
-const record = {kind:'real-native-sdxl',version,data,models,startedAt:new Date().toISOString()};
+const record = {kind:customQuality?'real-native-image-quality':'real-native-sdxl',expectedQuality,version,data,models,startedAt:new Date().toISOString()};
 let child, descriptor, browser, page, launch;
 const delay = ms => new Promise(r=>setTimeout(r,ms));
 async function until(read, match, timeout=30000) {const end=Date.now()+timeout; do {const value=await read(); if(match(value))return value; await delay(150)}while(Date.now()<end); throw Error('Validation state timeout')}
@@ -45,16 +47,23 @@ async function authorize(){if(page)await page.close();page=await browser.newPage
   record.profile=ready.profile;record.preparation=ready.preparation;assert.equal(ready.profile.family,'sdxl');assert.equal(ready.preparation.verifiedHash,'31e35c80fc4829d14f90153f4c74cd59c90b779f6afe05a74cd6120b893f7e5b');
   console.log('SDXL READY: pinned checkpoint verified, existing ComfyUI launched in isolated service.');
   await page.getByLabel('Describe lo que imaginas').fill('A small stone cottage beside a river in an autumn forest, warm afternoon light, detailed illustration, balanced composition');
+  if(customQuality){
+    await page.getByLabel('Tamaño de imagen',{exact:true}).selectOption('1024');
+    await page.getByText('Ajustar manualmente',{exact:true}).click();
+    await page.getByLabel('Pasos',{exact:true}).fill('24');
+    await page.getByLabel('CFG',{exact:true}).fill('6.5');
+    assert.match(await page.locator('.quality-summary').innerText(),/1024 × 1024/);
+  }
   const response=page.waitForResponse(r=>r.url().endsWith('/api/v1/jobs')&&r.request().method()==='POST');record.generationStartedAt=new Date().toISOString();await page.getByRole('button',{name:'Crear imagen',exact:true}).click();
   const job=await(await response).json();let last=0;
   record.job=await until(async()=>{const v=await api('/jobs/'+job.id);if(Date.now()-last>10000){last=Date.now();console.log('SDXL JOB: '+JSON.stringify({status:v.status,step:v.step,steps:v.steps}));await fs.writeFile(path.join(data,'current-job.json'),JSON.stringify(v))}if(['failed','cancelled','interrupted'].includes(v.status))throw Error(v.message);return v},v=>v.status==='completed',1200000);
-  assert.equal(record.job.width,768);assert.equal(record.job.height,768);assert.equal(record.job.steps,20);assert.equal(record.job.cfg,7);record.generationFinishedAt=new Date().toISOString();
+  for(const key of ['width','height','steps','cfg'])assert.equal(record.job[key],expectedQuality[key]);if(customQuality)assert.deepEqual(record.job.requestedQuality,expectedQuality);record.generationFinishedAt=new Date().toISOString();
   const downloaded=page.waitForEvent('download');await page.getByRole('link',{name:'Guardar imagen',exact:true}).click();await(await downloaded).saveAs(path.join(data,'sdxl-real.png'));
   await page.screenshot({path:path.join(data,'sdxl-real-ui.png'),fullPage:true});
   const logs=await fs.readFile(path.join(data,'image-engine','engine.log'),'utf8');record.lowVramConfirmed=/LOW_VRAM|lowvram|low VRAM/i.test(logs);assert.equal(record.lowVramConfirmed,true);
-  const state=await api('/creation');assert.equal(state.recommendation.verified,true);record.resourcesAfter=await api('/resources');
+  const state=await api('/creation');assert.equal(state.recommendation.verified,!customQuality);record.resourcesAfter=await api('/resources');
   await stop();await start();await authorize();const library=await api('/jobs');assert.equal(library.total,1);assert.equal(library.jobs[0].status,'completed');
-  record.result='passed';console.log('SDXL REAL PASS: 768x768, 20 steps, CFG7, lowvram confirmed, saved PNG and restart persistence.');
+  record.result='passed';console.log('SDXL REAL PASS: '+JSON.stringify(expectedQuality)+', lowvram confirmed, saved PNG and restart persistence.');
 })().catch(e=>{record.result='failed';record.error=String(e.stack||e).replace(/launch=[a-f0-9]{64}/g,'launch=[redacted]');console.error(record.error);process.exitCode=1}).finally(async()=>{
   try{await browser?.close();await stop();record.ownedServiceClosed=true}catch(e){record.cleanupError=String(e);process.exitCode=1}
   record.checkpointRetained=true;record.finishedAt=new Date().toISOString();await fs.writeFile(path.join(data,'validated-sdxl.json'),JSON.stringify(record,null,2));console.log('VALIDATION DATA: '+data)
