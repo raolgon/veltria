@@ -1,3 +1,5 @@
+> Entrega actual: [Veltria 0.6.2, recomendaciones y fichas](catalog-guidance.md).
+
 > Entrega actual: [Veltria 0.6.1, explorar compatibles por popularidad](compatible-browsing.md).
 
 > Entrega actual: [Veltria 0.6, descubrir y preparar](model-discovery.md).

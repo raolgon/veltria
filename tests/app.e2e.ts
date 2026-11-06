@@ -291,3 +291,23 @@ test('explorar compatibles sin texto: popularidad, más páginas y conservación
   await expect(page.getByRole('alert')).toContainText('No se pudo consultar')
   await expect(page.locator('.discovery-results h3')).toHaveCount(3)
 })
+
+test('recomendaciones: reutilizar primero, popularidad opcional y ajustes visibles',async({page})=>{
+  await page.route('**/api/v1/catalog',async route=>{
+    const response=await route.fetch(), catalog=await response.json()
+    for(const model of catalog.models){model.recommendation.level='recommended';model.recommendation.verified=false;model.status='missing'}
+    catalog.models[1].status='prepared'
+    await route.fulfill({response,json:catalog})
+  })
+  await page.goto(await launchUrl())
+  await page.evaluate(async()=>{const s=await fetch('/api/v1/session').then(r=>r.json());await fetch('/api/v1/settings',{method:'PATCH',headers:{'content-type':'application/json','x-veltria-csrf':s.csrf},body:JSON.stringify({locale:'es'})})})
+  await page.locator('.sidebar nav').getByRole('button',{name:'Modelos',exact:true}).click()
+  await expect(page.locator('.catalog-guidance')).toContainText('DreamShaper')
+  await expect(page.locator('.model-row').first()).toContainText('DreamShaper')
+  await expect(page.locator('.starting-settings').first()).toContainText('512 × 512')
+  await page.locator('#catalog-order').selectOption('popular')
+  await expect(page.locator('.catalog-guidance')).toHaveCount(0)
+  await expect(page.locator('.model-row').first()).toContainText('Stable Diffusion')
+  await page.locator('#catalog-order').selectOption('recommended')
+  for(const [width,height] of [[1363,900],[320,568]]){await page.setViewportSize({width,height});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:`test-results/guidance-${width}.png`,fullPage:true})}
+})

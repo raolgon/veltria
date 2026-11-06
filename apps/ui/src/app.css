@@ -113,3 +113,5 @@ progress::-webkit-progress-bar{background:var(--raised)}progress::-webkit-progre
 .discovery-results .model-row>div,.model-details{min-width:0;overflow-wrap:anywhere}.discovery-results select{max-width:100%;width:100%}.discovery-results input[type=range]{max-width:100%}
 
 .compatible-browse{margin:22px 0}.compatible-browse p{font-size:13px;line-height:1.7;color:var(--muted);margin-top:10px;max-width:65ch}.compatible-browse button{white-space:normal}
+
+.catalog-guidance{padding:22px;border:1px solid var(--line);background:var(--panel);border-radius:10px;margin:24px 0}.catalog-guidance h2{font-size:19px;font-weight:500}.catalog-guidance p{font-size:14px;line-height:1.7;max-width:70ch;color:var(--muted);margin:12px 0}.catalog-guidance button{margin-top:8px}.model-actions .starting-settings{font-size:13px;line-height:1.7;color:var(--text)}#catalog-order{max-width:320px}

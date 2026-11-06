@@ -681,5 +681,21 @@ export const english: Readonly<Record<string, string>> = {
   "Ordenados por descargas en Hugging Face. La compatibilidad es estimada hasta crear una imagen en este equipo.": "Sorted by Hugging Face downloads. Compatibility is estimated until an image is generated on this computer.",
   "descargas en Hugging Face": "downloads on Hugging Face",
   "Ver más modelos": "Show more models",
-  "Puedes seguir explorando aunque esta página no tenga coincidencias compatibles.": "You can keep exploring even if this page has no compatible matches."
+  "Puedes seguir explorando aunque esta página no tenga coincidencias compatibles.": "You can keep exploring even if this page has no compatible matches.",
+  "Para adaptar un estilo, personaje o efecto sobre un modelo base.": "Adapt a style, character or effect on top of a base model.",
+  "Para explorar ilustración y estilos artísticos.": "Explore illustration and artistic styles.",
+  "Para empezar con imágenes de uso general.": "Start with general-purpose images.",
+  "Modelo de la comunidad. Revisa los ejemplos y la descripción del autor para conocer su especialidad.": "Community model. Check the author\u2019s examples and description to learn its specialty.",
+  "Cumple los mínimos · memoria libre limitada": "Meets minimum requirements \u00b7 limited free memory",
+  "Compatible estimado · falta probar esta configuración": "Estimated compatibility \u00b7 this configuration is untested",
+  "Ordenar por": "Sort by",
+  "Recomendación de Veltria": "Veltria recommendation",
+  "Popularidad": "Popularity",
+  "Priorizamos lo comprobado con los ajustes elegidos y lo que ya tienes preparado. No es una comparación de calidad entre modelos.": "We prioritize options tested with the chosen settings and those already prepared. This does not compare model quality.",
+  "Usar esta propuesta": "Use this suggestion",
+  "Comprobado con los ajustes elegidos": "Tested with the chosen settings",
+  "Punto de partida": "Starting settings",
+  "Necesita un modelo base compatible. El plan reúne ambos componentes y muestra la descarga pendiente real.": "Requires a compatible base model. The plan includes both components and shows the actual remaining download.",
+  "Archivo elegido": "Selected file",
+  "Primero las opciones que ya puedes reutilizar; después, por descargas. La primera creación comprobará los ajustes en tu equipo.": "Reusable options first, then download count. Your first creation will test the settings on your computer."
 }

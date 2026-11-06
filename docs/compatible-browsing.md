@@ -1,3 +1,5 @@
+> Entrega actual: [Veltria 0.6.2, recomendaciones y fichas](catalog-guidance.md).
+
 # Explorar compatibles por popularidad · 0.6.1
 
 En **Modelos → Ver modelos para mi equipo**, no hace falta escribir un nombre ni elegir un estilo. La acción limpia el filtro de texto, consulta candidatos de Hugging Face para SD 1.5 y los ordena por el contador de descargas que publica el proveedor, de mayor a menor. Muestra el contador y la fuente, sin inventar cifras cuando faltan. Se conserva la búsqueda por nombre/intención y los filtros de modelos/LoRA.
