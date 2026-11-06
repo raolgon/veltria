@@ -2,7 +2,7 @@
 
 ## Versión actual: 0.9.0 · calidad de imagen a tu elección
 
-En **Crear → Calidad de imagen**, elige tamaño y esfuerzo de generación, o ajusta ancho, alto, pasos y CFG manualmente. Las opciones dependen de la familia seleccionada. Se muestra el tamaño real y se avisa al superar el punto de partida; el usuario puede intentarlo dentro de los límites de la receta. Más píxeles o pasos no garantizan un mejor resultado. Los ajustes de cada imagen se guardan en su trabajo sin cambiar la configuración del modelo. [Alcance y comprobaciones](docs/image-quality.md).
+En **Crear → Calidad de imagen**, elige tamaño y esfuerzo de generación, o ajusta ancho, alto, pasos y CFG manualmente. Las opciones dependen de la familia seleccionada. Se muestra el tamaño real y se avisa al superar el punto de partida; el usuario puede intentarlo dentro de los límites de la receta. Más píxeles o pasos no garantizan un mejor resultado. Los ajustes de cada imagen se guardan en su trabajo sin cambiar la configuración del modelo. [Alcance y comprobaciones](docs/image-quality.md). [Laboratorio Linux aislado en D](docs/linux-lab.md).
 
 SDXL Base 1.0 conserva su ajuste inicial de 768 px y `--lowvram`, junto a SD 1.5 y DreamShaper 8. [Prueba real anterior de SDXL](docs/sdxl-validation.md).
 
