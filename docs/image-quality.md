@@ -68,7 +68,7 @@ Pruebas de dominio y servicio comprueban límites por familia, entrada antigua s
 Cerrar la versión anterior. Mantener ejecutables y sus recursos juntos.
 
 ```powershell
-Set-Location 'C:\Users\rafao\Downloads\veltria-codex\veltria'
+Set-Location 'C:\Users\rafao\Documents\ChatGPT\Veltria'
 # Escritorio:
 .\release\0.9.0\win-unpacked\Veltria.exe
 # Navegador: abrir el enlace autorizado que imprime.
@@ -76,7 +76,7 @@ Set-Location 'C:\Users\rafao\Downloads\veltria-codex\veltria'
 ```
 
 ```bash
-cd '/mnt/c/Users/rafao/Downloads/veltria-codex/veltria'
+cd '/mnt/c/Users/rafao/Documents/ChatGPT/Veltria'
 ./release/0.9.0/linux-unpacked/veltria
 ./build/browser/0.9.0/veltria-web
 ```

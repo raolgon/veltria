@@ -23,7 +23,7 @@ Crear permite elegir **Imágenes** o **Video**. Conserva la generación de image
 Abrir en Windows PowerShell, después de cerrar la versión anterior:
 
 ```powershell
-Set-Location 'C:\Users\rafao\Downloads\veltria-codex\veltria'
+Set-Location 'C:\Users\rafao\Documents\ChatGPT\Veltria'
 .\release\0.9.0\win-unpacked\Veltria.exe
 # Navegador:
 .\build\browser\0.9.0\veltria-web.exe
@@ -32,7 +32,7 @@ Set-Location 'C:\Users\rafao\Downloads\veltria-codex\veltria'
 Linux / WSL con pantalla:
 
 ```bash
-cd '/mnt/c/Users/rafao/Downloads/veltria-codex/veltria'
+cd '/mnt/c/Users/rafao/Documents/ChatGPT/Veltria'
 ./release/0.9.0/linux-unpacked/veltria
 # Navegador:
 ./build/browser/0.9.0/veltria-web
@@ -117,10 +117,10 @@ Windows PowerShell, tras el build nativo y empaquetado correspondientes:
 .\release\win-unpacked\Veltria.exe
 ```
 
-Para desarrollo en Windows, primero `Set-Location 'C:\Users\rafao\Downloads\veltria-codex\veltria'` y usar los comandos `bun` anteriores. Para este checkout en WSL:
+Para desarrollo en Windows, primero `Set-Location 'C:\Users\rafao\Documents\ChatGPT\Veltria'` y usar los comandos `bun` anteriores. Para este checkout en WSL:
 
 ```bash
-cd '/mnt/c/Users/rafao/Downloads/veltria-codex/veltria'
+cd '/mnt/c/Users/rafao/Documents/ChatGPT/Veltria'
 export PATH="/home/rafao/.local/share/veltria-tools/bun-linux-x64:/home/rafao/.nvm/versions/node/v24.13.0/bin:$PATH"
 ```
 
