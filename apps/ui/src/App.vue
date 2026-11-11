@@ -8,10 +8,12 @@ import ImageLibrary from './ImageLibrary.vue'
 import VideoStudio from './VideoStudio.vue'
 import VideoLibrary from './VideoLibrary.vue'
 import SetupWizard from './SetupWizard.vue'
+import WelcomeSetup from './WelcomeSetup.vue'
 import ModelCatalog from './ModelCatalog.vue'
 import ResourceMonitor from './ResourceMonitor.vue'
 import { validImageQuality } from '@veltria/core'
 import { api } from './api'
+import type { ManagedState } from '@veltria/contracts'
 import { es } from './copy'
 type View = 'create' | 'models' | 'library' | 'device' | 'settings'
 const navigation = computed(() => [{ id: 'create', label: t(es.create), icon: Sparkles }, { id: 'models', label: t('Modelos'), icon: Layers3 }, { id: 'library', label: t('Biblioteca'), icon: FolderOpen }, { id: 'device', label: t(es.device), icon: Monitor }, { id: 'settings', label: t(es.settings), icon: Settings2 }] as const)
@@ -19,7 +21,10 @@ const view = ref<View>('create'), settings = ref<Settings>({ theme: 'system', lo
 const connected = ref(false), loading = ref(true), saving = ref(false), probing = ref(false), error = ref(''), notice = ref('')
 const hardware = ref<Hardware | null>(null), hardwareError = ref(''), hardwareBusy = ref(false), engine = ref<Engine | null>(null)
 const setupOpen = ref(false), setupState = ref<SetupState | null>(null)
+const managed = ref<ManagedState | null>(null)
+const managedBusy = computed(() => ['downloading', 'installing', 'preparing'].includes(managed.value?.status || ''))
 const catalog = ref<Catalog | null>(null)
+const needsSetup = computed(() => managedBusy.value || !creation.value?.bound || !(catalog.value?.models.some(model => model.status === 'prepared')))
 const creation = ref<CreationState | null>(null), plan = ref<PreparationPlan | null>(null), jobs = ref<ImageJob[]>([]), totalJobs = ref(0), operationBusy = ref(false)
 const mediaKind = ref<'image' | 'video'>('image'), videoState = ref<VideoState | null>(null), videoPlan = ref<VideoPlan | null>(null), videoJobs = ref<VideoJob[]>([]), totalVideos = ref(0), videoPrompt = ref(''), videoPreset = ref<'preview' | 'short'>('preview'), selectedVideoId = ref('')
 const selectedVideo = computed(() => videoJobs.value.find(job => job.id === selectedVideoId.value) || videoState.value?.activeJob || null)
@@ -41,17 +46,27 @@ async function refresh() {
   if (refreshPending) { refreshQueued = true; return }
   refreshPending = true
   try {
-    const [saved, motor, studio, library, movies, movieLibrary, modelCatalog, setup] = await Promise.all([api.settings(), api.engine(), api.creation(), api.jobs(), api.video(), api.videos(), api.catalog(), api.setup()])
+    const [saved, motor, studio, library, movies, movieLibrary, modelCatalog, setup, installation] = await Promise.all([api.settings(), api.engine(), api.creation(), api.jobs(), api.video(), api.videos(), api.catalog(), api.setup(), api.managed()])
     if (creation.value?.configuration.id !== studio.configuration.id) {
       const initial = !creation.value
       quality.value = null; format.value = studio.configuration.format; selectedJobId.value = ''; plan.value = null
-      if (initial) try {
-        const draft = JSON.parse(sessionStorage.getItem('veltria-image-settings') || 'null')
-        if (draft?.configurationId === studio.configuration.id && ['square', 'landscape', 'portrait'].includes(draft.format) && (!draft.quality || validImageQuality(draft.quality, studio.profile))) { format.value = draft.format; quality.value = draft.quality ?? null }
-      } catch {}
+      if (initial) {
+        if (!studio.activeJob && library.jobs[0]) {
+          selectedJobId.value = library.jobs[0].id
+          if (!prompt.value.trim()) prompt.value = library.jobs[0].prompt
+        }
+        try {
+          const draft = JSON.parse(sessionStorage.getItem('veltria-image-settings') || 'null')
+          if (draft?.configurationId === studio.configuration.id && ['square', 'landscape', 'portrait'].includes(draft.format) && (!draft.quality || validImageQuality(draft.quality, studio.profile))) { format.value = draft.format; quality.value = draft.quality ?? null }
+          else if (!studio.activeJob && library.jobs[0]) {
+            format.value = library.jobs[0].format
+            quality.value = library.jobs[0].requestedQuality && validImageQuality(library.jobs[0].requestedQuality, studio.profile) ? { ...library.jobs[0].requestedQuality } : null
+          }
+        } catch {}
+      }
     }
     settings.value = saved; engine.value = motor; creation.value = studio; totalJobs.value = library.total
-    setupState.value = setup; catalog.value = modelCatalog; videoState.value = movies; totalVideos.value = movieLibrary.total
+    managed.value = installation; setupState.value = setup; catalog.value = modelCatalog; videoState.value = movies; totalVideos.value = movieLibrary.total
     videoJobs.value = [...movieLibrary.jobs, ...videoJobs.value.filter(job => !movieLibrary.jobs.some(incoming => incoming.id === job.id))]
     const older = jobs.value.filter(job => !library.jobs.some(incoming => incoming.id === job.id))
     jobs.value = [...library.jobs, ...older]
@@ -80,6 +95,7 @@ async function connect() {
     stream.onerror = () => { connected.value = false; error.value = 'Se perdió la conexión con el servicio. Tu descripción se conserva. Intentando reconectar…' }
     stream.onopen = () => { connected.value = true; error.value = ''; void refresh() }
     await refreshHardware()
+    if (needsSetup.value && !managedBusy.value) scanSetup()
   } catch (cause) { connected.value = false; error.value = message(cause) }
   finally { loading.value = false }
 }
@@ -135,7 +151,8 @@ function importConfiguration(value: unknown) { void operation(async () => {
   notice.value = 'Configuración importada. Ya puedes elegirla junto a su modelo.'
 }) }
 function openVideo() { mediaKind.value = 'video'; void navigate('create') }
-function openSetup() { setupOpen.value = true; scanSetup() }
+function openSetup() { setupOpen.value = true; if (!managedBusy.value) scanSetup() }
+function chooseSetupModel(id: string) { void operation(async () => { creation.value = await api.selectConfiguration(id); quality.value = null; plan.value = null }) }
 function scanSetup(directory?: string) { void operation(async () => { setupState.value = await api.scanSetup(directory) }) }
 function prepareSetup(revision: string) { void operation(async () => { await api.prepareSetup(revision); setupOpen.value = false; mediaKind.value = 'image'; await navigate('create') }) }
 function reviewPlan() { void operation(async () => { plan.value = await api.plan() }) }
@@ -171,11 +188,18 @@ function cancelJob(id: string) { void operation(async () => { await api.cancel(i
 function reconcileJob(id: string) { void operation(async () => { await api.reconcile(id) }) }
 function changeModelsDirectory(path: string) { void operation(async () => { settings.value = await api.save({ modelsDirectory: path }); plan.value = await api.plan() }) }
 function saveBinding() { void operation(async () => { settings.value = await api.save({ engineBinding: { directory: bindingDirectory.value.trim(), python: bindingPython.value.trim() } }); bindingDirty.value = false; notice.value = 'Motor vinculado. Veltria reutilizará su instalación para preparar el perfil.' }) }
-function reuse(job: ImageJob) { prompt.value = job.prompt; format.value = job.format; selectedJobId.value = job.id; void navigate('create') }
+function reuse(job: ImageJob) { prompt.value = job.prompt; format.value = job.format; quality.value = job.requestedQuality && validImageQuality(job.requestedQuality, creation.value?.profile) ? { ...job.requestedQuality } : null; selectedJobId.value = job.id; void navigate('create') }
 function moreJobs() { void operation(async () => { const page = await api.jobs(jobs.value.length); jobs.value.push(...page.jobs); totalJobs.value = page.total }) }
 
 async function navigate(id: View) { view.value = id; await nextTick(); window.scrollTo({ top: 0 }); document.querySelector<HTMLElement>('h1')?.focus() }
 function mediaChange(event: MediaQueryListEvent) { systemDark.value = event.matches }
+watch(needsSetup, async (locked, wasLocked) => {
+  if (!locked && wasLocked) {
+    setupOpen.value = false; view.value = 'create'
+    await nextTick(); window.scrollTo({ top: 0 })
+    document.querySelector<HTMLElement>('h1')?.focus({ preventScroll: true })
+  }
+})
 watch([isDark, () => settings.value.theme], applyTheme)
 watch(() => settings.value.locale, setLocale, { immediate: true })
 onMounted(() => {
@@ -191,18 +215,20 @@ onBeforeUnmount(() => { destroyed = true; stream?.close(); media?.removeEventLis
 
 <template>
   <a class="skip-link" href="#content">{{ t('Ir al contenido') }}</a>
-  <div class="app-shell" :class="{ 'creating-view': view === 'create' }">
+  <WelcomeSetup v-if="needsSetup" :catalog="catalog" :hardware="hardware" :state="setupState" :managed="managed" :preparation="creation?.preparation" :connected="connected" :loading="loading" :busy="operationBusy || managedBusy" :error="error || hardwareError" :dark="isDark" @select="chooseSetupModel" @scan="scanSetup" @prepare="prepareSetup" @pause="pauseProfile" @refresh="refresh" @reconnect="connect" @theme="changeTheme(isDark ? 'light' : 'dark')" @language="changeLanguage(locale === 'es' ? 'en' : 'es')"/>
+  <div v-else class="app-shell" :class="{ 'creating-view': view === 'create' }">
     <aside class="sidebar">
       <a class="brand" href="#" @click.prevent="navigate('create')" :aria-label="t('Veltria, ir a crear')"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M2 6h7l7 14 5-10h-6l2-4h12L17 29z" fill="currentColor"/></svg><span>VELTRIA</span><span class="brand-dot"></span></a>
       <div class="workspace-label">{{ t('TU ESPACIO CREATIVO') }}</div>
       <nav :aria-label="t('Principal')"><button v-for="item in navigation" :key="item.id" :class="['nav-item', { active: view === item.id }]" :aria-label="item.label" :aria-current="view === item.id ? 'page' : undefined" @click="navigate(item.id)"><component :is="item.icon" :size="19"/><span>{{ item.label }}</span><ChevronRight v-if="view === item.id" :size="14" class="nav-arrow"/></button></nav>
-      <div class="sidebar-bottom"><ResourceMonitor :connected="connected" :cpu-name="hardware?.cpu.name"/><div class="sidebar-footer"><span class="version">VELTRIA <span>{{ t('0.9 / IMÁGENES') }}</span></span><button class="icon-button" :disabled="saving" :aria-label="isDark ? t('Cambiar a modo claro') : t('Cambiar a modo oscuro')" @click="changeTheme(isDark ? 'light' : 'dark')"><Sun v-if="isDark" :size="19"/><Moon v-else :size="19"/></button></div></div>
+      <div class="sidebar-bottom"><ResourceMonitor :connected="connected" :cpu-name="hardware?.cpu.name"/><div class="sidebar-footer"><span class="version">VELTRIA <span>{{ t('0.10 / IMÁGENES') }}</span></span><button class="icon-button" :disabled="saving" :aria-label="isDark ? t('Cambiar a modo claro') : t('Cambiar a modo oscuro')" @click="changeTheme(isDark ? 'light' : 'dark')"><Sun v-if="isDark" :size="19"/><Moon v-else :size="19"/></button></div></div>
     </aside>
     <div class="main-shell">
       <header class="topbar"><a class="mobile-brand" href="#" @click.prevent="navigate('create')"><span>VELTRIA</span></a><div class="breadcrumb">{{ t('Estudio') }} <ChevronRight :size="13"/><span>{{ heading }}</span></div><div class="topbar-right"><span class="local-note"><ShieldCheck :size="15"/>{{ t(connected ? es.connected : es.disconnected) }}</span><button class="icon-button mobile-theme-switch" :disabled="saving" :aria-label="isDark ? t('Cambiar a modo claro') : t('Cambiar a modo oscuro')" @click="changeTheme(isDark ? 'light' : 'dark')"><Sun v-if="isDark" :size="19"/><Moon v-else :size="19"/></button></div></header>
       <div v-if="error" class="service-alert" role="alert"><AlertTriangle :size="18"/><span>{{ t(error) }}</span><button class="secondary-button" :disabled="loading" @click="connect">{{ t('Volver a conectar') }}</button><button class="icon-button" :aria-label="t('Cerrar aviso')" @click="error = ''">×</button></div>
       <p v-if="notice" class="service-notice" role="status">{{ t(notice) }}</p>
       <main id="content">
+        <section v-if="managed && managed.status !== 'idle' && managed.status !== 'ready'" class="preparation-feedback" aria-live="polite"><p>{{ t(managed.message) }}</p><button class="secondary-button" @click="openSetup">{{ t('Ver preparación del equipo') }}</button></section>
         <div v-if="view === 'create' || view === 'library'" class="media-tabs" role="group" :aria-label="t('Tipo de contenido')"><button :class="{ selected: mediaKind === 'image' }" :aria-pressed="mediaKind === 'image'" @click="mediaKind = 'image'">{{ t('Imágenes') }}</button><button :class="{ selected: mediaKind === 'video' }" :aria-pressed="mediaKind === 'video'" @click="mediaKind = 'video'">{{ t('Video') }}</button></div>
         <CreationStudio v-if="view === 'create' && mediaKind === 'image'" v-model:prompt="prompt" v-model:format="format" v-model:quality="quality" :state="creation" :plan="plan" :job="selectedJob" :connected="connected" :busy="operationBusy" :error="error" @plan="reviewPlan" @prepare="prepareProfile" @resume="resumeProfile" @pause="pauseProfile" @create="generate" @cancel="cancelJob" @reconcile="reconcileJob" @close-plan="plan = null" @models-directory="changeModelsDirectory" @device="navigate('device')" @models="navigate('models')" @setup="openSetup"/>
         <VideoStudio v-else-if="view === 'create'" v-model:prompt="videoPrompt" v-model:preset="videoPreset" :state="videoState" :plan="videoPlan" :job="selectedVideo" :connected="connected" :busy="operationBusy" :error="error" @plan="reviewVideoPlan" @prepare="prepareVideo" @pause="pauseVideo" @create="generateVideo" @cancel="cancelVideo" @reconcile="reconcileVideo" @close-plan="videoPlan = null" @device="navigate('device')"/>
@@ -230,9 +256,9 @@ onBeforeUnmount(() => { destroyed = true; stream?.close(); media?.removeEventLis
           <section class="settings-card"><h2>{{ t('Tu espacio creativo') }}</h2><p>{{ t('Incluye imagen y video local con perfiles revisados. Instalación de motores, imagen a video y edición siguen pendientes.') }}</p></section>
         </template>
       </main>
-      <footer class="prototype-bar"><span><ShieldCheck :size="14"/>{{ connected ? t('Servicio autorizado · sólo este equipo') : t('Sin conexión al servicio') }}</span><span>{{ t('Veltria 0.9 · Creación local') }}</span></footer>
+      <footer class="prototype-bar"><span><ShieldCheck :size="14"/>{{ connected ? t('Servicio autorizado · sólo este equipo') : t('Sin conexión al servicio') }}</span><span>{{ t('Veltria 0.10 · Creación local') }}</span></footer>
     </div>
-    <SetupWizard v-if="setupOpen" :state="setupState" :connected="connected" :busy="operationBusy" :error="error" @close="setupOpen = false" @scan="scanSetup" @prepare="prepareSetup"/>
+    <SetupWizard v-if="setupOpen" :state="setupState" :managed="managed" :preparation="creation?.preparation" :hardware="hardware" :catalog="catalog" :connected="connected" :busy="operationBusy || managedBusy" :error="error" @select="chooseSetupModel" @close="setupOpen = false" @refresh="refresh" @scan="scanSetup" @prepare="prepareSetup"/>
     <div class="mobile-dock"><nav class="mobile-nav" :aria-label="t('Navegación móvil')"><button v-for="item in navigation" :key="item.id" :class="{ active: view === item.id }" :aria-label="item.label" :aria-current="view === item.id ? 'page' : undefined" @click="navigate(item.id)"><component :is="item.icon" :size="21"/><span>{{ item.label }}</span></button></nav></div>
   </div>
 </template>

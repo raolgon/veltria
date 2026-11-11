@@ -27,6 +27,7 @@ export class CreationFixture {
   complete = true
   memoryModes: (string|undefined)[] = []
   failure = false
+  failureDetails: Record<string, any> | null = null
   wrongHash = false
   ignoreRange = false
   downloadDelay = 12
@@ -63,7 +64,7 @@ export class CreationFixture {
       if (path.startsWith('/history/')) {
         const id = path.split('/').pop()!, input = this.accepted.get(id)
         if (!input || !this.complete || this.cancellations.includes(id)) return Response.json({})
-        return Response.json({ [id]: this.failure ? { status: { status_str: 'error', completed: false, messages: [['execution_error', {}]] } } : { status: { completed: true, status_str: 'success' }, outputs: { '7': { images: [{ filename: `veltria_${id}_00001_.png`, type: 'output', subfolder: '' }] } } } })
+        return Response.json({ [id]: this.failure ? { status: { status_str: 'error', completed: false, messages: [['execution_error', this.failureDetails || {}]] } } : { status: { completed: true, status_str: 'success' }, outputs: { '7': { images: [{ filename: `veltria_${id}_00001_.png`, type: 'output', subfolder: '' }] } } } })
       }
       if (/^\/api\/jobs\/[a-f0-9-]+\/cancel$/.test(path)) { const id = path.split('/')[3]; this.cancellations.push(id); return Response.json({ cancelled: true }) }
       if (path === '/view') {

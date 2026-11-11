@@ -6,11 +6,11 @@ Identidad de la aplicación compartida Vue: grafito/ámbar en oscuro y marfil/co
 
 Navegación: Crear, Modelos, Biblioteca, Mi equipo y Ajustes. En escritorio, menú lateral con recursos compactos, espacio de descripción/resultado e inspector de modelo y ajustes. Acción principal ámbar y detalles técnicos desplegables. En móvil, seguir [MOBILE-UI.md](MOBILE-UI.md).
 
-La persona empieza por la idea. Preparación resume recursos, descarga, espacio, ubicación y cambios antes de autorizar. No convertir cada dependencia en otra pantalla. Modelo, licencia, parámetros e incertidumbre permanecen consultables. Mantener descripciones y ajustes al navegar, preparar o recuperar errores.
+El primer inicio prepara un modelo antes de mostrar el editor. Después, la persona empieza por la idea. Preparación resume recursos, descarga, espacio, ubicación y cambios antes de autorizar. No convertir cada dependencia en otra pantalla. Modelo, licencia, parámetros e incertidumbre permanecen consultables. Mantener descripciones y ajustes al navegar, preparar o recuperar errores.
 
 La calidad ofrece elecciones sencillas y campos manuales para quien los necesite, mostrando los valores reales. Compatibilidad, disponibilidad de pesos y ejecución comprobada no son el mismo estado. Un ejemplo visual se identifica como ejemplo; la ilustración de bienvenida no se presenta como una creación del usuario.
 
-Video sigue identificado como experimental. Las funciones futuras no tienen controles que simulen resultados. El recorrido objetivo busca/reutiliza ComfyUI y ofrece instalación propia si falta; esa última capacidad está pendiente.
+Video sigue identificado como experimental. Las funciones futuras no tienen controles que simulen resultados. El recorrido busca/reutiliza ComfyUI y ofrece instalación propia si falta, con plan, consentimiento y progreso real. La elección avanzada de destino conserva los archivos de ubicaciones anteriores.
 
 ## Tokens y temas
 
@@ -29,6 +29,8 @@ Los tokens semánticos actuales viven en `apps/ui/src/style.css`, con ajustes de
 Una estructura de componentes para ambos temas. Guardar preferencia en el servicio/SQLite; caché local sólo de presentación. Aplicar sin reiniciar ni perder entradas. Sistema sigue `prefers-color-scheme`; Electron refleja su tema nativo. Los colores de las imágenes generadas no se alteran por cambiar de tema.
 
 ## Interacción y contenido
+
+La bienvenida inicial adopta la propuesta 3 elegida por el usuario: pantalla completa sin editor detrás, hardware, recomendación principal, alternativa visible y acceso a más modelos. El plan se revisa en la misma página. Sin vínculo y modelo preparado no se muestra la navegación del estudio. La implementación y los estados se describen en [el brief de inicio](design/welcome-brief.md).
 
 Español e inglés mediante el catálogo compartido, con contenido del usuario literal. Iconos y recursos incluidos localmente. Mensajes de error con siguiente acción; datos desconocidos como desconocidos. Éxito/aviso/error incluyen texto o icono además del color.
 

@@ -2,7 +2,7 @@
 
 Aplicación local para crear imágenes sin tener que administrar manualmente modelos, carpetas o workflows. La persona decide qué crear; Veltria prepara lo necesario. Imagen primero, con video todavía experimental.
 
-**Versión vigente: 0.9.0 · rama de trabajo: `development`.** Estado y pendientes en [docs/status.md](docs/status.md). La instalación automática de ComfyUI es el siguiente desarrollo; actualmente se reutiliza una instalación existente.
+**Versión de desarrollo: 0.10.0 · rama de trabajo: `development`.** Estado y pendientes en [docs/status.md](docs/status.md). La preparación reutiliza ComfyUI existente y ofrece una [instalación propia](docs/managed-setup.md) cuando falta un motor utilizable.
 
 ## Abrir en esta PC
 
@@ -11,17 +11,17 @@ Proyecto: `C:\Users\rafao\Documents\ChatGPT\Veltria`. Cerrar otras versiones ant
 ```powershell
 Set-Location 'C:\Users\rafao\Documents\ChatGPT\Veltria'
 # Escritorio:
-.\release\0.9.0\win-unpacked\Veltria.exe
+.\release\0.10.0\win-unpacked\Veltria.exe
 # Navegador: abrir el enlace autorizado que imprime.
-.\build\browser\0.9.0\veltria-web.exe
+.\build\browser\0.10.0\veltria-web.exe
 ```
 
 Linux/WSL con pantalla:
 
 ```bash
 cd '/mnt/c/Users/rafao/Documents/ChatGPT/Veltria'
-./release/0.9.0/linux-unpacked/veltria
-./build/browser/0.9.0/veltria-web
+./release/0.10.0/linux-unpacked/veltria
+./build/browser/0.10.0/veltria-web
 ```
 
 El enlace del navegador vence en 60 segundos y es de un solo uso. Ejecutar de nuevo el lanzador emite otro. Cerrar una pestaña no detiene el servicio; usar Ctrl+C en su lanzador propietario. No ejecutar Windows y Linux sobre una misma base activa.
@@ -35,7 +35,7 @@ El enlace del navegador vence en 60 segundos y es de un solo uso. Ejecutar de nu
 - Consultar recursos reales del equipo y usar español/inglés y temas claro/oscuro/sistema.
 - Revisar el flujo experimental de video H3. No hay una generación H3 real validada en esta PC.
 
-SDXL tiene pruebas GPU reales en Windows a 768 y 1024 px. Eso no certifica todas las resoluciones ni otros equipos. No hay un LLM adicional para seleccionar modelos o reescribir descripciones. LAN, audio e instalación administrada del motor siguen pendientes.
+SDXL tiene pruebas GPU reales en Windows a 768 y 1024 px. Eso no certifica todas las resoluciones ni otros equipos. No hay un LLM adicional para seleccionar modelos o reescribir descripciones. LAN y audio siguen pendientes.
 
 ## Desarrollo
 
@@ -61,11 +61,13 @@ bun run start:desktop
 | [PHILOSOPHY.md](PHILOSOPHY.md) | Experiencia para personas sin conocimientos técnicos. |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Procesos, API, persistencia, seguridad y distribución. |
 | [DESIGN.md](DESIGN.md), [MOBILE-UI.md](MOBILE-UI.md) | Obsidian, temas y comportamiento responsive. |
-| [FIRST-TASK.md](FIRST-TASK.md) | Próximo trabajo: cerrar la preparación administrada del hito 3. |
+| [FIRST-TASK.md](FIRST-TASK.md) | Próximo incremento propuesto del hito 4 y aceptación pendiente del hito 3. |
+| [Hito 4](docs/milestone-4.md) | Requisitos, implementación actual, faltantes y criterios de cierre. |
 | [Estado](docs/status.md), [validación](docs/validation.md) | Qué funciona, evidencia y pendientes por plataforma. |
 | [Preparación](docs/setup.md), [modelos](docs/models.md), [calidad](docs/image-quality.md) | Recorridos y límites actuales de imagen. |
 | [Video](docs/video.md), [recursos](docs/resources.md), [idiomas](docs/languages.md) | Funciones específicas y su alcance. |
 | [Laboratorio Linux](docs/linux-lab.md) | Entorno aislado de pruebas en `D:\Veltria\lab`. |
+| [Prueba Windows](docs/windows-lab.md) | Entorno y datos separados en D:, instalación propia y generación CUDA comprobadas. |
 | [Red local](LOCAL-NETWORK.md) | Requisito pendiente, no una función habilitada. |
 | [Prototipo](UI-PREVIEW.md) | Referencia de diseño conservada; no es la aplicación de producción. |
 

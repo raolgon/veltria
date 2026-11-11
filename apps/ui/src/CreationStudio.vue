@@ -3,12 +3,12 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { Sparkles, Monitor, Check, Download, Pause, ArrowRight, RefreshCw, X, Info, Image as ImageIcon } from '@lucide/vue'
 import type { CreationState, PreparationPlan, ImageJob, ImageQuality } from '@veltria/contracts'
 import { bytes, t, date } from './i18n'
-import { validImageQuality, profileDimensions } from '@veltria/core'
+import { validImageQuality, profileDimensions, reduceImageQuality } from '@veltria/core'
 import ImageQualityControls from './ImageQualityControls.vue'
 import IdeaArt from './IdeaArt.vue'
 const props = defineProps<{ state: CreationState | null; plan: PreparationPlan | null; job: ImageJob | null; prompt: string; quality: ImageQuality | null; format: 'square' | 'landscape' | 'portrait'; connected: boolean; busy: boolean; error: string }>()
 const emit = defineEmits<{ 'update:quality': [value: ImageQuality | null]; 'update:prompt': [value: string]; 'update:format': [value: 'square' | 'landscape' | 'portrait']; plan: []; prepare: []; resume: []; pause: []; create: []; cancel: [id: string]; reconcile: [id: string]; closePlan: []; modelsDirectory: [path: string]; device: []; models: []; setup: [] }>()
-const dialog = ref<HTMLDialogElement | null>(null), consent = ref(false), location = ref('')
+const dialog = ref<HTMLDialogElement | null>(null), consent = ref(false), location = ref(''), recoveryNotice = ref('')
 const preparing = computed(() => !!props.state && ['downloading', 'verifying', 'starting'].includes(props.state.preparation.status))
 const activeJob = computed(() => !!props.job && ['queued', 'submitting', 'running', 'saving'].includes(props.job.status))
 const image = computed(() => props.job?.imageId ? `/api/v1/artifacts/${props.job.imageId}` : null)
@@ -20,6 +20,26 @@ const verifiedQuality = computed(() => {
   const quality = props.quality ?? { width, height, steps: props.state.configuration.steps, cfg: props.state.configuration.cfg }
   return !!evidence && evidence.width === quality.width && evidence.height === quality.height && quality.steps === props.state.configuration.steps && quality.cfg === props.state.configuration.cfg
 })
+const reducedQuality = computed(() => {
+  if (!props.job || props.job.status !== 'failed' || props.job.failure?.kind !== 'memory' || !props.state) return null
+  return reduceImageQuality(props.job, props.state.profile, props.state.configuration.steps, props.state.configuration.cfg)
+})
+const reducedApplied = computed(() => {
+  if (!reducedQuality.value || !props.state) return false
+  const [width, height] = profileDimensions(props.format, props.state.profile)
+  const effective = props.quality ?? { width, height, steps: props.state.configuration.steps, cfg: props.state.configuration.cfg }
+  return effective.width === reducedQuality.value.width && effective.height === reducedQuality.value.height && effective.steps === reducedQuality.value.steps && effective.cfg === reducedQuality.value.cfg
+})
+function applyReducedQuality() {
+  if (!reducedQuality.value || !props.job || !props.state) return
+  if (props.job.prompt) emit('update:prompt', props.job.prompt)
+  emit('update:format', props.job.format)
+  const [startWidth, startHeight] = profileDimensions(props.job.format, props.state.profile)
+  const isDefault = reducedQuality.value.width === startWidth && reducedQuality.value.height === startHeight && reducedQuality.value.steps === props.state.configuration.steps && reducedQuality.value.cfg === props.state.configuration.cfg
+  emit('update:quality', isDefault ? null : { ...reducedQuality.value })
+  recoveryNotice.value = 'Ajustes reducidos listos para revisar. Pulsa Crear imagen cuando quieras volver a intentarlo.'
+}
+watch(() => props.job?.id, () => { recoveryNotice.value = '' })
 const canCreate = computed(() => validQuality.value && props.connected && props.state?.canCreate && !preparing.value && !props.busy && !activeJob.value && !!props.prompt.trim())
 const mainLabel = computed(() => activeJob.value ? t('Creación en curso') : preparing.value ? t('Preparando tu perfil…') : props.state?.canCreate ? t('Crear imagen') : !props.state?.bound ? t('Preparar mi equipo') : ['paused', 'error'].includes(props.state?.preparation.status || '') ? t('Continuar preparación') : t('Preparar para crear'))
 function action() {
@@ -43,7 +63,27 @@ watch(() => props.plan, async plan => {
         <img v-if="image" :src="image" :alt="job?.prompt.slice(0, 180) || t('Imagen creada con Veltria')" class="generated-image">
         <template v-else><IdeaArt/><div class="canvas-copy"><h2>{{ activeJob ? t('Tu idea está tomando forma.') : t('Todo empieza con una idea.') }}</h2><p>{{ activeJob ? t('El resultado aparecerá aquí cuando termine el motor.') : t('Describe tu imagen y prepara tu primera creación.') }}</p></div><div class="canvas-bottom"><span>{{ t('Ilustración de bienvenida · no es un resultado generado') }}</span></div></template>
       </div>
-      <div v-if="job" class="creation-feedback" aria-live="polite"><strong>{{ t(job.message) }}</strong><progress v-if="activeJob" :max="job.steps" :value="job.step ?? undefined" :aria-label="t('Progreso de creación')"></progress><div class="action-row"><a v-if="image" :href="image + '?download=1'" class="primary-button" download><Download :size="16"/>{{ t('Guardar imagen') }}</a><button v-if="activeJob && !['submitting', 'saving'].includes(job.status)" class="text-button" :disabled="busy" @click="emit('cancel', job.id)">{{ t('Cancelar esta creación') }}</button><button v-if="job.status === 'interrupted' && job.enginePromptId" class="text-button" :disabled="busy" @click="emit('reconcile', job.id)">{{ t('Comprobar si terminó') }}</button></div></div>
+      <div v-if="job" class="creation-feedback" aria-live="polite">
+        <span v-if="job.status === 'failed' && job.failure" class="pill">{{ t({ memory: 'Memoria insuficiente', incompatible: 'Ajustes o modelo incompatibles', 'engine-unavailable': 'Motor no disponible', execution: 'Fallo de ejecución del motor' }[job.failure.kind]) }}</span>
+        <strong>{{ t(job.message) }}</strong>
+        <progress v-if="activeJob" :max="job.steps" :value="job.step ?? undefined" :aria-label="t('Progreso de creación')"></progress>
+        <div v-if="job.status === 'failed'" class="recovery-guide">
+          <p v-if="reducedQuality">{{ t('Propuesta para reducir el uso de memoria: {0} × {1} px · {2} pasos · CFG {3} (intento fallido: {4} × {5} px · {6} pasos).', { 0: reducedQuality.width, 1: reducedQuality.height, 2: reducedQuality.steps, 3: reducedQuality.cfg, 4: job.width, 5: job.height, 6: job.steps }) }}</p>
+          <p v-if="recoveryNotice" role="status" class="helper">{{ t(recoveryNotice) }}</p>
+          <div class="action-row">
+            <button v-if="reducedQuality && !reducedApplied" class="secondary-button" :disabled="busy" @click="applyReducedQuality">{{ t('Usar {0} × {1} px ({2} pasos)', { 0: reducedQuality.width, 1: reducedQuality.height, 2: reducedQuality.steps }) }}</button>
+            <button v-if="job.failure?.kind === 'memory' || job.failure?.kind === 'incompatible'" class="secondary-button" :disabled="busy" @click="emit('models')">{{ t('Elegir otro modelo') }}</button>
+            <button v-if="job.failure?.kind === 'engine-unavailable'" class="secondary-button" :disabled="busy" @click="emit('device')">{{ t('Revisar motor en Mi equipo') }}</button>
+          </div>
+          <details class="failure-details">
+            <summary>{{ t('Ajustes y diagnóstico de este intento') }}</summary>
+            <p>{{ t('Intento original') }}: {{ job.width }} × {{ job.height }} px · {{ job.steps }} {{ t('pasos') }} · CFG {{ job.cfg ?? 7 }} · {{ t('Semilla') }} {{ job.seed }}</p>
+            <p v-if="job.failure?.node">{{ t('Nodo del motor') }}: {{ job.failure.node }}</p>
+            <pre v-if="job.failure?.detail" class="failure-trace">{{ job.failure.detail }}</pre>
+          </details>
+        </div>
+        <div class="action-row"><a v-if="image" :href="image + '?download=1'" class="primary-button" download><Download :size="16"/>{{ t('Guardar imagen') }}</a><button v-if="activeJob && !['submitting', 'saving'].includes(job.status)" class="text-button" :disabled="busy" @click="emit('cancel', job.id)">{{ t('Cancelar esta creación') }}</button><button v-if="job.status === 'interrupted' && job.enginePromptId" class="text-button" :disabled="busy" @click="emit('reconcile', job.id)">{{ t('Comprobar si terminó') }}</button></div>
+      </div>
       <div class="prompt-section"><label for="prompt"><Sparkles :size="17"/>{{ t('Describe lo que imaginas') }}</label><textarea id="prompt" :value="prompt" maxlength="4000" :placeholder="t('Un lugar, una escena, algo que todavía no existe…')" @input="emit('update:prompt', ($event.target as HTMLTextAreaElement).value)"></textarea><div class="prompt-bottom"><span>{{ t('Tu descripción se conserva durante la preparación.') }}</span><span>{{ prompt.length }} / 4000</span></div></div>
     </section>
     <aside class="creation-settings" :aria-label="t('Perfil para tu equipo')">

@@ -13,13 +13,15 @@ import { validateEngineBinding } from '../../../packages/adapters/src/image-engi
 import { CreationController, CreationError } from './creation'
 import { VideoController, type VideoOptions } from './video'
 import { SetupController, type SetupOptions } from './setup'
+import { ManagedController, type ManagedOptions } from './managed'
+import { managedStateSchema, managedPlanSchema, managedPrepareSchema } from '@veltria/contracts'
 import { mkdir, stat, writeFile } from 'node:fs/promises'
 
 export const secret = () => randomBytes(32).toString('hex')
 function equal(a: unknown, b: string): boolean {
   return typeof a === 'string' && Buffer.byteLength(a) === Buffer.byteLength(b) && timingSafeEqual(Buffer.from(a), Buffer.from(b))
 }
-type Options = { dataDir: string; uiDir: string; controlToken: string; instanceId: string; devOrigin?: string; onShutdown?: () => void; creation?: Pick<ConstructorParameters<typeof CreationController>[0], 'profile' | 'profiles' | 'hardware' | 'disk' | 'engine' | 'allowLocalFixture'>; setup?: Pick<SetupOptions, 'discover'>; video?: Pick<VideoOptions, 'hardware' | 'components' | 'probe' | 'engine' | 'disk'> }
+type Options = { dataDir: string; uiDir: string; controlToken: string; instanceId: string; devOrigin?: string; onShutdown?: () => void; creation?: Pick<ConstructorParameters<typeof CreationController>[0], 'profile' | 'profiles' | 'hardware' | 'disk' | 'engine' | 'allowLocalFixture'>; setup?: Pick<SetupOptions, 'discover'>; managed?: Pick<ManagedOptions, 'recipe' | 'allowLocalFixture' | 'disk' | 'install'>; video?: Pick<VideoOptions, 'hardware' | 'components' | 'probe' | 'engine' | 'disk'> }
 export async function createServer(options: Options) {
   const app = Fastify({ logger: false, bodyLimit: 32768, requestTimeout: 10_000, connectionTimeout: 10_000, keepAliveTimeout: 5000 })
   const database = join(options.dataDir, 'settings.sqlite'), existed = await stat(database).then(() => true).catch(() => false)
@@ -51,9 +53,10 @@ export async function createServer(options: Options) {
   const creation = new CreationController({ ...options.creation, dataDir: options.dataDir, repository, changed: emit })
   const video = new VideoController({ ...options.video, dataDir: options.dataDir, repository, changed: () => emit('video') })
   const setup = new SetupController({ ...options.setup, settings: () => repository.get(), creation, changed: () => emit('setup') })
+  const managed = new ManagedController({ ...options.managed, dataDir: options.dataDir, repository, creation, setup, changed: () => emit('setup') })
   // Serialize ownership changes, including requests from separate browser/desktop clients.
   let gpuAction: Promise<unknown> = Promise.resolve()
-  function serialized<T>(work: () => Promise<T>): Promise<T> { const run = gpuAction.then(work); gpuAction = run.catch(() => {}); return run }
+  function serialized<T>(work: () => Promise<T>): Promise<T> { const run = gpuAction.then(() => { if (managed.busy()) throw new CreationError('Espera o pausa la instalación del equipo antes de cambiar la configuración.'); return work() }); gpuAction = run.catch(() => {}); return run }
   function withEngine<T>(kind: 'image' | 'video', work: () => Promise<T>): Promise<T> {
     return serialized(async () => { if (kind === 'image') await video.releaseEngine(); else await creation.releaseEngine(); return work() })
   }
@@ -93,6 +96,10 @@ export async function createServer(options: Options) {
     console.error('Error del servicio:', cause instanceof Error ? cause.name : 'desconocido')
     return error(reply, 500, 'INTERNAL', 'No se pudo completar la acción. Tus ajustes guardados se conservan.')
   })
+  app.addHook('preHandler', async (request) => {
+    const path = request.url.split('?')[0]
+    if (managed.busy() && !['GET', 'HEAD'].includes(request.method) && path.startsWith('/api/') && !['/api/v1/setup/managed/pause', '/api/v1/control/shutdown', '/api/v1/control/launch', '/api/v1/session'].includes(path)) throw new CreationError('Espera o pausa la instalación del equipo antes de cambiar la configuración.')
+  })
   app.get('/api/v1/identity', async () => identity)
   app.post('/api/v1/control/launch', async () => ({ ...identity, origin, nonce: issueNonce() }))
   app.post('/api/v1/control/shutdown', async (_req, reply) => {
@@ -112,8 +119,8 @@ export async function createServer(options: Options) {
     return sessionSchema.parse({ csrf: session.csrf, settings: repository.get() })
   })
   app.get('/api/v1/session', async (request) => sessionSchema.parse({ csrf: sessions.get(request.cookies.veltria_session!)!.csrf, settings: repository.get() }))
-  app.get('/api/v1/health', async () => healthSchema.parse({ ...identity, version: '0.9.0', runtime: `Bun ${Bun.version}`, capabilities: { hardware: true, engineProbe: true, generation: true, preparation: true, video: true, lan: false } }))
-  app.get('/api/v1/activity', async () => { const image = creation.activity(), movie = video.activity(); return { preparing: image.preparing || movie.preparing, jobs: image.jobs + movie.jobs } })
+  app.get('/api/v1/health', async () => healthSchema.parse({ ...identity, version: '0.10.0', runtime: `Bun ${Bun.version}`, capabilities: { hardware: true, engineProbe: true, generation: true, preparation: true, video: true, lan: false } }))
+  app.get('/api/v1/activity', async () => { const image = creation.activity(), movie = video.activity(); return { preparing: managed.busy() || image.preparing || movie.preparing, jobs: image.jobs + movie.jobs } })
   app.get('/api/v1/settings', async () => repository.get())
   app.patch('/api/v1/settings', async request => serialized(async () => {
     const patch = settingsPatchSchema.parse(request.body)
@@ -134,6 +141,14 @@ export async function createServer(options: Options) {
     emit('settings'); return settings
   }))
   app.get('/api/v1/setup', async () => setupStateSchema.parse(setup.state()))
+  app.get('/api/v1/setup/managed', async () => managedStateSchema.parse(managed.state()))
+  app.post('/api/v1/setup/managed/plan', async request => { const input = z.object({ directory: z.string().trim().min(1).max(1000).optional(), allowSeparateInstallation: z.boolean().optional() }).strict().parse(request.body); return serialized(async () => managedPlanSchema.parse(await managed.plan(input.directory, input.allowSeparateInstallation))) })
+  app.post('/api/v1/setup/managed/prepare', async (request, reply) => serialized(async () => {
+    const input = managedPrepareSchema.parse(request.body)
+    video.assertMutable(); await video.releaseEngine()
+    const result = await managed.start(input.revision); reply.code(202); return managedStateSchema.parse(result)
+  }))
+  app.post('/api/v1/setup/managed/pause', async request => { z.object({}).strict().parse(request.body); return managedStateSchema.parse(await managed.pause()) })
   app.post('/api/v1/setup/scan', async (request, reply) => { const input = setupScanSchema.parse(request.body); reply.code(202); return setupStateSchema.parse(setup.scan(input.directory)) })
   app.post('/api/v1/setup/plan', async request => { const input = setupPlanRequestSchema.parse(request.body); return setupPlanSchema.parse(await setup.plan(input.scanId, input.installationId)) })
   app.post('/api/v1/setup/prepare', async (request, reply) => serialized(async () => {
@@ -256,6 +271,7 @@ export async function createServer(options: Options) {
     async close() {
       if (closing) return
       closing = true; engineAbort.abort()
+      await managed.close()
       await Promise.all([setup.close(), creation.close(), video.close()])
       for (const stream of streams.keys()) stream.end()
       streams.clear()

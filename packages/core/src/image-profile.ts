@@ -61,3 +61,60 @@ export function validImageQuality(quality: { width: number; height: number; step
   return [quality.width, quality.height].every(value => Number.isInteger(value) && value >= min && value <= max && value % 64 === 0)
     && Number.isInteger(quality.steps) && quality.steps >= 1 && quality.steps <= 60 && Number.isFinite(quality.cfg) && quality.cfg >= 1 && quality.cfg <= 15
 }
+
+export function classifyJobFailure(raw: { exceptionType?: string; exceptionMessage?: string; traceback?: string; nodeType?: string; errorMessage?: string }): { kind: 'memory' | 'incompatible' | 'engine-unavailable' | 'execution'; message: string; detail: string | null; node: string | null } {
+  const parts = [raw.exceptionType, raw.exceptionMessage, raw.traceback, raw.errorMessage].filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+  const text = parts.join('\n')
+  const detail = text ? text.slice(0, 4000) : null
+  const node = typeof raw.nodeType === 'string' && raw.nodeType.trim() ? raw.nodeType.trim().slice(0, 200) : null
+  if (/OutOfMemoryError|CUDA out of memory|HIP out of memory|MPS backend out of memory|DefaultCPUAllocator: not enough memory|not enough memory: you tried to allocate|cannot allocate memory|Allocation on device|CUBLAS_STATUS_ALLOC_FAILED|std::bad_alloc|insufficient memory|oom/i.test(text)) {
+    return {
+      kind: 'memory',
+      message: 'Se agotó la memoria disponible al crear la imagen. Se conservan tu descripción y ajustes; puedes reducir el tamaño o elegir un modelo menos exigente antes de volver a crear.',
+      detail,
+      node
+    }
+  }
+  if (/El motor rechazó la receta|Falta el nodo|reconocer el modelo|cancelación segura|no corresponde a la familia|size mismatch for|Error\(s\) in loading state_dict|mat1 and mat2 shapes cannot be multiplied|Prompt outputs failed validation|Value not in list|missing keys in state_dict|unexpected key in state_dict|shape '.*' is invalid for input|Expected .* dimensions|return type|SafetensorError|HeaderTooLarge|MetadataIncompleteBuffer/i.test(text)) {
+    return {
+      kind: 'incompatible',
+      message: 'El modelo o sus ajustes no son compatibles con esta receta en el motor. Se conservan tu descripción y ajustes; prueba otra configuración o modelo.',
+      detail,
+      node
+    }
+  }
+  if (/ECONNREFUSED|ECONNRESET|ETIMEDOUT|fetch failed|socket|network|El motor existente no pudo arrancar|El motor tardó más de tres minutos|El motor no devolvió una cola válida|El motor devolvió una respuesta no válida|El motor respondió HTTP 5/i.test(text)) {
+    return {
+      kind: 'engine-unavailable',
+      message: 'El motor local dejó de responder antes de terminar la imagen. Se conservan tu descripción y ajustes; comprueba el motor y vuelve a crear cuando quieras.',
+      detail,
+      node
+    }
+  }
+  return {
+    kind: 'execution',
+    message: 'El motor encontró un fallo interno al crear la imagen. Se conservan tu descripción y ajustes; revisa los detalles técnicos o prueba con otros ajustes antes de volver a crear.',
+    detail,
+    node
+  }
+}
+
+export function reduceImageQuality(job: { width: number; height: number; steps: number; cfg?: number; format: 'square' | 'landscape' | 'portrait' }, profile?: Pick<ImageProfile, 'family'>, defaultSteps = 20, defaultCfg = 7): { width: number; height: number; steps: number; cfg: number } | null {
+  const [startWidth, startHeight] = profileDimensions(job.format, profile)
+  const steps = Math.min(job.steps, defaultSteps)
+  const cfg = job.cfg ?? defaultCfg
+  if (job.width * job.height > startWidth * startHeight) {
+    return { width: startWidth, height: startHeight, steps, cfg }
+  }
+  const { min } = imageQualityLimits(profile)
+  const nextLong = Math.max(min, Math.max(job.width, job.height) - 128)
+  const [reducedWidth, reducedHeight] = qualityDimensions(nextLong, job.format)
+  if (reducedWidth * reducedHeight < job.width * job.height && reducedWidth >= min && reducedHeight >= min) {
+    return { width: reducedWidth, height: reducedHeight, steps, cfg }
+  }
+  if (job.steps > 12) {
+    return { width: job.width, height: job.height, steps: 12, cfg }
+  }
+  return null
+}
+

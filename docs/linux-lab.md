@@ -1,49 +1,41 @@
 # Laboratorio Linux aislado en D
 
-Laboratorio de pruebas para el recorrido desde cero, separado de la instalación habitual. Ejecuta una copia del paquete vigente; no implementa el instalador administrado del motor.
+Revisado el 10 de noviembre de 2026. Distribución WSL 2 independiente **Veltria-Lab**, Ubuntu 24.04.5 LTS x64, usuario `veltria`. Disco ext4 en `D:\Veltria\lab\linux\ext4.vhdx`.
 
-## Entorno listo
+## Prueba manual vigente
 
-- Distribución WSL 2 independiente **Veltria-Lab**, Ubuntu 24.04.5 LTS x64.
-- Disco ext4 en `D:\Veltria\lab\linux\ext4.vhdx`; usuario `veltria` sin privilegios administrativos por defecto.
-- Copia del paquete Veltria 0.9.0 en `/opt/veltria-lab/app`; lanzador web en `/opt/veltria-lab/browser`, reutilizando sus recursos.
-- Datos de uso manual: `/home/veltria/lab/data`. Configuración del contenedor y caché también dentro de `/home/veltria/lab`.
-- Sin ComfyUI, pesos ni dependencias de inferencia instalados. No requiere instalar Bun o Node al usuario: el paquete incluye sus runtimes.
-- C y D no se montan automáticamente; `appendWindowsPath=false`. No se vinculan modelos ni bases de Windows o de la distribución Ubuntu habitual.
-
-La interoperabilidad WSL permanece habilitada por compatibilidad con los servicios compartidos entre distribuciones; no se importan rutas Windows al PATH. WSL comparte kernel, red, GPU y recursos; este laboratorio separa archivos y pruebas, **no es una máquina virtual de seguridad independiente**. No se modificó `.wslconfig`, la distribución predeterminada ni Docker.
-
-La GPU RTX 4050 es visible. WSL informa unos 7,4 GiB de RAM utilizables en este host; Veltria debe recomendar según esos recursos, no según los 16 GB físicos de Windows. No se aumentó la memoria global para evitar alterar otras distribuciones. Falta generación GPU dentro del laboratorio y Linux nativo sigue pendiente.
-
-## Abrir
-
-Hay accesos de doble clic en `D:\Veltria\lab`:
-
-- `Abrir Veltria Linux.cmd`.
-- `Abrir navegador Linux.cmd`: abrir el enlace autorizado que imprime.
-- `Terminal Linux.cmd`.
+Paquete web Linux 0.10.0 con servicio propio en `/home/veltria/lab/welcome3-20261109/app`; datos en `/home/veltria/lab/welcome3-20261109/manual-data`. Incluye la bienvenida principal y el progreso corregido de entorno/modelo. La copia de Windows y los datos de otras distribuciones no se comparten.
 
 Desde PowerShell:
 
 ```powershell
-wsl -d Veltria-Lab -u veltria --cd /home/veltria --exec /home/veltria/bin/veltria-desktop
-wsl -d Veltria-Lab -u veltria --cd /home/veltria --exec /home/veltria/bin/veltria-web
+wsl -d Veltria-Lab -u veltria --exec env VELTRIA_DATA_DIR=/home/veltria/lab/welcome3-20261109/manual-data /home/veltria/lab/welcome3-20261109/app/veltria-web
 ```
 
-Cerrar primero la app o el lanzador antes de detener el laboratorio con `wsl --terminate Veltria-Lab`. Evitar `wsl --shutdown`, que afecta a las demás distribuciones. No editar directamente `ext4.vhdx`.
+El lanzador imprime un enlace autorizado de un uso y 60 segundos de vigencia. También está el acceso `build/lab/Abrir prueba inicial Linux.cmd` del repositorio. Cerrar la pestaña no detiene el servicio: cerrar desde el lanzador propietario. No compartir una base activa con Windows.
 
-La aplicación es una copia del paquete construido desde el commit `a355e7d72e97529301420a7111b529ddfda7a99f`. Los cambios del repositorio no se trasladan automáticamente: hay que construir y desplegar la siguiente versión. La guía completa y los scripts usados están en `D:\Veltria\lab\LEEME.md` y `D:\Veltria\lab\scripts`.
+El 10 de noviembre, por solicitud del usuario, se retiraron las dos copias SD 1.5 del laboratorio: la del hito 3 y la de esta prueba manual, 2.132.696.762 bytes cada una. Se conservaron entornos, dependencias y resultados. Al reabrir se verificó que los tres modelos del catálogo estaban `missing`, se mostraba la bienvenida y no se montaba el editor. Registro en `/home/veltria/lab/models-reset-20261110.json`. Este reinicio **no** equivale a un equipo sin motor; el entorno continúa instalado. Nuevas descargas requieren un plan autorizado.
 
-## Evidencia
+## Aislamiento y recursos
 
-`D:\Veltria\lab\reports\validation.json`: **passed**. Prueba con servicio y launcher reales, sesión autorizada, hardware Linux/WSL/NVIDIA, preferencias tras reiniciar, ausencia de ComfyUI y rechazo de generación sin preparación. Electron abrió su ventana real con WSLg; desde la UI se ejecutó la búsqueda y se comprobó el estado sin instalación. El renderer confirmó sandbox y aislamiento activos, sin `window.require`.
+C y D no se montan automáticamente; `appendWindowsPath=false`. No se vinculan modelos ni bases de Windows o de Ubuntu habitual. La interoperabilidad WSL permanece habilitada por los servicios compartidos. WSL comparte kernel, red, GPU y recursos: separa archivos y pruebas, **no es una máquina virtual de seguridad independiente**. No se modificaron `.wslconfig`, la distribución predeterminada ni Docker.
 
-Captura: `D:\Veltria\lab\reports\fresh-linux-desktop.png`. Las comprobaciones usaron directorios separados en `/home/veltria/lab/checks`; dejaron el directorio manual vacío y cerraron sus procesos. No hubo descarga de modelos ni inferencia. La prueba utilizó el Node interno de Electron; los ajustes de diagnóstico remoto sólo se usan durante ella, no en los accesos normales.
+RTX 4050 visible, 6 GiB de VRAM y unos 7,4 GiB de RAM utilizables en WSL. Veltria recomienda según esos recursos, no según los 16 GB nominales de Windows. No se aumentó la memoria global. Linux nativo continúa pendiente.
 
-El estado mostrado por la aplicación sigue siendo «instalación desde Veltria pendiente». El siguiente desarrollo debe sustituir esa salida por un plan real de instalación administrada, con descarga, espacio, consentimiento y recuperación. El laboratorio ya está preparado para validarlo desde cero.
+Cerrar antes la app o lanzador si se necesita `wsl --terminate Veltria-Lab`. Evitar `wsl --shutdown`, que afecta a las demás distribuciones, y no editar directamente `ext4.vhdx`.
+
+## Evidencia y copias anteriores
+
+- `/home/veltria/lab/acceptance-hito3-20261110`: prueba independiente del 10 de noviembre, sin entorno instalado inicialmente en ese destino. Completó instalación desde la bienvenida, recuperación de SIGKILL en extracción y dependencias, imagen GPU de 512 × 512 y Biblioteca tras reiniciar. Conserva sus propios pesos y entorno, separados de la prueba manual sin modelos. Usó los paquetes verificados del entorno anterior y descargó SD 1.5 de nuevo. Informe `build/lab/hito3-acceptance-20261110.json` y PNG `build/lab/first-welcome-acceptance.png`.
+
+- `/home/veltria/lab/hito3-20261109`: instalación administrada desde cero, pausa/reapertura, SD 1.5 real de 512 × 512 y biblioteca persistente comprobadas. Sus pesos se retiraron después para repetir la prueba; se conserva la evidencia histórica.
+- `/home/veltria/lab/onboarding-20261109`: ensayo anterior de la preparación en diálogo, sustituido por la bienvenida principal. No es el destino de la prueba vigente.
+- `/opt/veltria-lab/app` y `/opt/veltria-lab/browser`: copias históricas 0.9.0 del commit `a355e7d72e97529301420a7111b529ddfda7a99f`. Los accesos antiguos de `D:\Veltria\lab` pueden abrirlas; no usarlos para comprobar cambios de 0.10.
+- `D:\Veltria\lab\reports\validation.json` y `fresh-linux-desktop.png`: prueba inicial 0.9 de web/Electron en WSLg, hardware, sesión, preferencias y ausencia de motor, sin inferencia en aquella prueba. No describen el estado actual.
+- `build/lab/welcome3-{desktop,mobile}.png`: bienvenida y plan; `model-progress-mobile.png`: progreso con bytes de fixture. Los recorridos de UI y las fixtures no acreditan inferencia GPU.
+
+Los cambios del repositorio no se trasladan automáticamente. Construir y desplegar el paquete antes de probar; conservar directorios de datos y registros. Detalles en [validación](validation.md) e [instalación administrada](managed-setup.md).
 
 ## Sistema de origen
 
-[Imagen oficial Ubuntu](https://releases.ubuntu.com/noble/ubuntu-24.04.5-wsl-amd64.wsl), SHA-256 `bb415d824822c4b878125729af451a5d18fb13d1cf5cbed9a7393ad64ac6039e`, comprobada con SHA256SUMS y su firma válida de Ubuntu CD Image Automatic Signing Key (2012), huella `843938DF228D22F7B3742BC0D94AA3F0EFE21092`.
-
-Se usó la [importación de distribuciones de WSL documentada por Microsoft](https://learn.microsoft.com/windows/wsl/use-custom-distro). Sólo se instalaron en la distribución nueva las bibliotecas de sistema necesarias para Electron y herramientas básicas. El paquete se transfirió por stdin, conservando las unidades Windows desmontadas tras reiniciar el laboratorio.
+Imagen oficial Ubuntu: `https://releases.ubuntu.com/noble/ubuntu-24.04.5-wsl-amd64.wsl`, SHA-256 `bb415d824822c4b878125729af451a5d18fb13d1cf5cbed9a7393ad64ac6039e`, comprobada con SHA256SUMS y firma de Ubuntu CD Image Automatic Signing Key (2012), huella `843938DF228D22F7B3742BC0D94AA3F0EFE21092`. Se importó la distribución y se instalaron las bibliotecas de sistema necesarias para Electron. El paquete se transfirió por stdin, conservando las unidades Windows desmontadas.

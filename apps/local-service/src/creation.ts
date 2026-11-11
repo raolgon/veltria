@@ -4,14 +4,15 @@ import { join, dirname, resolve, isAbsolute } from 'node:path'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { createWriteStream } from 'node:fs'
-import { creationStateSchema, preparationPlanSchema, type CreateImageInput, type CreationState, type Preparation, type PreparationPlan, type ImageJob, type Settings, type Hardware, type Catalog, type ConfigurationEntry, imageConfigurationSchema } from '@veltria/contracts'
-import { recommendImage, profileDimensions, validImageQuality, imageWorkflow, type ImageProfile, imageModels, configurationsFor, configurationRevision } from '@veltria/core'
+import { creationStateSchema, preparationPlanSchema, type CreateImageInput, type CreationState, type Preparation, type PreparationPlan, type ImageJob, type JobFailure, type Settings, type Hardware, type Catalog, type ConfigurationEntry, imageConfigurationSchema } from '@veltria/contracts'
+import { recommendImage, profileDimensions, validImageQuality, classifyJobFailure, imageWorkflow, type ImageProfile, imageModels, configurationsFor, configurationRevision } from '@veltria/core'
 import { detectHardware, SettingsRepository } from '@veltria/adapters'
 import { downloadProfileFile, finishProfileFile, fileBytes } from '../../../packages/adapters/src/profile-download'
 import { LocalImageEngine, engineJson, type ImageEngine } from '../../../packages/adapters/src/image-engine'
 import { resolveModel } from './discovery'
 import { ModelStorage } from './model-storage'
 import { CreationStore } from './creation-store'
+import { storageBudget, dataStorageError, storageFailure, storagePermission, probeStorageWrite } from './storage-issues'
 
 export class CreationError extends Error { constructor(message: string, readonly statusCode = 409) { super(message); this.name = 'CreationError' } }
 const now = () => new Date().toISOString()
@@ -145,7 +146,7 @@ export class CreationController {
 
   private revisionFor(profile: ImageProfile, binding = this.options.repository.get().engineBinding) { return digest({ profile: profile.revision, sha256: profile.sha256, bytes: profile.bytes, destination: this.componentPath(profile), adaptation: profile.adaptation, binding }) }
   private revision() { return this.revisionFor(this.profile) }
-  private setPreparation(patch: Partial<Preparation>) { this.preparation = { ...this.preparation, ...patch, updatedAt: now() }; this.store.savePreparation(this.preparation); this.options.changed('creation') }
+  private setPreparation(patch: Partial<Preparation>) { this.preparation = { ...this.preparation, ...patch, updatedAt: now() }; try { this.store.savePreparation(this.preparation) } catch (error) { dataStorageError(error, this.options.dataDir) }; this.options.changed('creation') }
   private saveJob(job: ImageJob) { job.updatedAt = now(); this.store.saveJob(job); this.options.changed('jobs') }
   private async hardware() {
     if (!this.hardwareCache || Date.now() - this.hardwareCache.at > 30000) this.hardwareCache = { value: await (this.options.hardware?.() || detectHardware(this.options.dataDir)), at: Date.now() }
@@ -169,17 +170,24 @@ export class CreationController {
   }
   async plan(binding = this.options.repository.get().engineBinding): Promise<PreparationPlan> {
     const destination = this.destination()
-    const components = await this.componentBytes()
+    const storageIssues = [] as NonNullable<PreparationPlan['storageIssues']>
+    const components = await this.componentBytes().catch(error => {
+      const issue = storageFailure(error, this.modelsDirectory(), 'models'); if (!issue) throw error
+      storageIssues.push(issue)
+      return this.components().map(profile => ({ profile, destination: this.componentPath(profile), size: 0, received: 0 }))
+    })
     const total = components.reduce((sum, item) => sum + item.profile.bytes, 0)
     const received = components.reduce((sum, item) => sum + item.received, 0)
     const remaining = total - received, available = await (this.options.disk ? this.options.disk(dirname(destination)) : diskAvailable(dirname(destination))), required = remaining + 512 * 1024 ** 2
     const recommendation = recommendImage(await this.hardware(),this.profile), blockers: string[] = []
     if (!binding) blockers.push('Falta vincular la carpeta y el Python del motor existente en Mi equipo. No se instalará un segundo motor.')
     if (['unknown', 'unsupported'].includes(recommendation.level)) blockers.push(recommendation.reason)
-    if (available === null) blockers.push('No se pudo comprobar el espacio de esta ubicación. Elige otra carpeta accesible.')
-    else if (available < required) blockers.push('No hay espacio suficiente para la descarga pendiente y el margen de trabajo de 512 MiB.')
+    const permission = await storagePermission(dirname(destination), 'models')
+    if (permission && !storageIssues.some(issue => issue.code === permission.code)) storageIssues.push(permission)
+    storageIssues.push(...storageBudget(dirname(destination), 'models', required, available))
+    blockers.push(...storageIssues.filter(issue => issue.severity === 'error').map(issue => issue.message))
     if (components.some(item => item.size && item.size !== item.profile.bytes)) blockers.push('Ya existe un archivo distinto en el destino. Se conserva intacto; elige otra ubicación.')
-    return preparationPlanSchema.parse({ revision: this.revisionFor(this.profile, binding), profileId: this.profile.id, destination, totalBytes: total, remainingBytes: remaining, requiredBytes: required, availableBytes: available, canPrepare: blockers.length === 0, blockers, changes: [...components.map(item => `Comprobar o descargar ${item.profile.model}: ${item.profile.bytes} bytes. SHA-256: ${item.profile.sha256}. Fuente: ${item.profile.source}. Licencia: ${item.profile.license} (${item.profile.licenseUrl}).`), 'Reutilizar tu Python y ComfyUI existentes, sin instalar dependencias ni modificar sus modelos.', 'Iniciar un proceso local supervisado con rutas propias de modelos, datos y resultados. No detener otras instancias.', 'Los nodos personalizados permanecen desactivados en este primer perfil. No se generará ninguna imagen hasta pulsar Crear.'], license: this.profile.license, licenseUrl: this.profile.licenseUrl, source: this.profile.source, reuseBytes: received })
+    return preparationPlanSchema.parse({ revision: this.revisionFor(this.profile, binding), profileId: this.profile.id, destination, totalBytes: total, remainingBytes: remaining, requiredBytes: required, availableBytes: available, canPrepare: blockers.length === 0, blockers, changes: [...components.map(item => `Comprobar o descargar ${item.profile.model}: ${item.profile.bytes} bytes. SHA-256: ${item.profile.sha256}. Fuente: ${item.profile.source}. Licencia: ${item.profile.license} (${item.profile.licenseUrl}).`), 'Reutilizar tu Python y ComfyUI existentes, sin instalar dependencias ni modificar sus modelos.', 'Iniciar un proceso local supervisado con rutas propias de modelos, datos y resultados. No detener otras instancias.', 'Los nodos personalizados permanecen desactivados en este primer perfil. No se generará ninguna imagen hasta pulsar Crear.'], license: this.profile.license, licenseUrl: this.profile.licenseUrl, source: this.profile.source, reuseBytes: received, storageIssues })
   }
   assertConfigurationMutable() { if (this.managingFiles || this.startingPrepare || this.preparationTask || this.generationTask || this.store.jobs(0, 10000).some(job => !terminal(job))) throw new CreationError('Hay una preparación o creación activa. Termínala o cancélala antes de cambiar el motor o la ubicación.') }
   async configurationChanged() { await this.engine.stop(); this.preparation = this.idle(); this.store.savePreparation(this.preparation); this.hardwareCache = null; this.options.changed('creation') }
@@ -194,9 +202,15 @@ export class CreationController {
       if (!plan.canPrepare) throw new CreationError(plan.blockers.join(' '))
       this.store.authorize(revision, { ...plan, sha256: this.profile.sha256, url: this.profile.url, engineBinding: this.options.repository.get().engineBinding })
       const abort = new AbortController(); this.preparationAbort = abort
-      this.setPreparation({ id: this.preparation.revision === revision ? this.preparation.id : crypto.randomUUID(), revision, status: 'downloading', received: plan.totalBytes - plan.remainingBytes, total: plan.totalBytes, message: 'Preparando la descarga de tu perfil…', checkpoint: null, verifiedHash: null })
+      this.setPreparation({ id: this.preparation.revision === revision ? this.preparation.id : crypto.randomUUID(), revision, storageIssue: null, status: 'downloading', received: plan.totalBytes - plan.remainingBytes, total: plan.totalBytes, message: 'Preparando la descarga de tu perfil…', checkpoint: null, verifiedHash: null })
       this.preparationTask = this.runPreparation(abort.signal).finally(() => { this.preparationTask = null; this.preparationAbort = null })
       return this.preparation
+    } catch (error) {
+      const issue = storageFailure(error, this.options.dataDir, 'data')
+      if (!issue) throw error
+      this.preparationAbort = null
+      try { this.setPreparation({ status: 'error', storageIssue: issue, message: issue.message }) } catch { this.options.changed('creation') }
+      throw new CreationError(issue.message)
     } finally { this.startingPrepare = false }
   }
   private async runPreparation(signal: AbortSignal) {
@@ -206,6 +220,7 @@ export class CreationController {
       for (const [index, { profile }] of components.entries()) {
         const preserved = components.slice(index + 1).reduce((sum, item) => sum + item.received, 0)
         const destination = this.componentPath(profile); await mkdir(dirname(destination), { recursive: true, mode: 0o700 })
+        await probeStorageWrite(dirname(destination), signal)
         if (await fileBytes(destination) !== profile.bytes) await downloadProfileFile(profile, destination, signal, (received, restart) => {
           if (Date.now() - this.preparationProgressAt > 350 || received === profile.bytes || restart) {
             this.preparationProgressAt = Date.now()
@@ -222,7 +237,9 @@ export class CreationController {
       this.setPreparation({ status: 'ready', message: 'Listo para crear. Tu descripción se conserva; pulsa Crear imagen cuando quieras.' })
     } catch (error) {
       const received = await this.componentBytes().then(items => items.reduce((sum, item) => sum + item.received, 0)).catch(() => 0)
-      this.setPreparation({ status: signal.aborted ? 'paused' : 'error', received, message: signal.aborted ? 'Preparación pausada. Se conserva lo descargado; puedes continuar.' : preparationError(error) })
+      const issue = signal.aborted ? null : storageFailure(error, this.modelsDirectory(), 'models')
+      try { this.setPreparation({ status: signal.aborted ? 'paused' : 'error', received, storageIssue: issue, message: signal.aborted ? 'Preparación pausada. Se conserva lo descargado; puedes continuar.' : issue?.message || preparationError(error) }) }
+      catch (error) { const dataIssue = storageFailure(error, this.options.dataDir, 'data'); if (dataIssue) this.preparation = { ...this.preparation, storageIssue: dataIssue, message: dataIssue.message }; this.options.changed('creation') }
     }
   }
   async pausePreparation() {
@@ -269,8 +286,21 @@ export class CreationController {
     const abort = new AbortController(); this.generationAbort = abort
     this.generationTask = this.runJob(job, abort.signal).finally(() => { this.generationTask = null; this.generationAbort = null; this.schedule() })
   }
+  private classifyHistoryError(entry: any) {
+    const messages = Array.isArray(entry?.status?.messages) ? entry.status.messages : []
+    const executionError = messages.find((item: any) => Array.isArray(item) && item[0] === 'execution_error')?.[1] || {}
+    const traceback = Array.isArray(executionError.traceback) ? executionError.traceback.join('') : typeof executionError.traceback === 'string' ? executionError.traceback : undefined
+    return classifyJobFailure({
+      exceptionType: typeof executionError.exception_type === 'string' ? executionError.exception_type : undefined,
+      exceptionMessage: typeof executionError.exception_message === 'string' ? executionError.exception_message : undefined,
+      traceback,
+      nodeType: typeof executionError.node_type === 'string' ? executionError.node_type : typeof executionError.node_id === 'string' ? executionError.node_id : undefined,
+      errorMessage: typeof entry?.status?.status_str === 'string' && !executionError.exception_message ? `status: ${entry.status.status_str}` : undefined
+    })
+  }
   private async runJob(initial: ImageJob, signal: AbortSignal) {
     let job = initial, socket: WebSocket | undefined
+    let classifiedFailure: { kind: JobFailure['kind']; message: string; detail: string | null; node: string | null } | null = null
     const update = (patch: Partial<ImageJob>) => {
       const saved = this.store.job(job.id)
       if (saved && terminal(saved)) { job = saved; return }
@@ -294,6 +324,15 @@ export class CreationController {
           if (message.type === 'progress' && Number.isFinite(data.value) && Number.isFinite(data.max) && data.max > 0) update({ status: 'running', step: Math.min(data.value, data.max), steps: data.max, message: `Creando la imagen · paso ${data.value} de ${data.max}` })
           else if (message.type === 'execution_start') update({ status: 'running', message: 'Cargando el perfil y creando la imagen…' })
           else if (message.type === 'executing' && data.node === '6') update({ message: 'Convirtiendo el resultado en imagen…' })
+          else if (message.type === 'execution_error') {
+            const traceback = Array.isArray(data.traceback) ? data.traceback.join('') : typeof data.traceback === 'string' ? data.traceback : undefined
+            classifiedFailure = classifyJobFailure({
+              exceptionType: typeof data.exception_type === 'string' ? data.exception_type : undefined,
+              exceptionMessage: typeof data.exception_message === 'string' ? data.exception_message : undefined,
+              traceback,
+              nodeType: typeof data.node_type === 'string' ? data.node_type : typeof data.node_id === 'string' ? data.node_id : undefined
+            })
+          }
         } catch { /* a malformed event cannot change persisted job state */ }
       }
       update({ status: 'submitting', enginePromptId: job.id, engineUrl: origin, engineVersion: this.engine.version, message: 'Enviando tu creación al motor…' })
@@ -312,12 +351,18 @@ export class CreationController {
         const history = await engineJson(origin, `/history/${job.enginePromptId}`, undefined, signal)
         const entry = history[job.enginePromptId!]
         if (entry) {
-          if (entry.status?.status_str === 'error' || entry.status?.messages?.some((message: any) => message?.[0] === 'execution_error' || message?.[0] === 'execution_interrupted')) throw new Error('El motor no pudo terminar la imagen. Se conservan la descripción y los ajustes; revisa la memoria disponible antes de volver a crear.')
+          if (entry.status?.messages?.some((message: any) => message?.[0] === 'execution_interrupted') && !entry.status?.messages?.some((message: any) => message?.[0] === 'execution_error')) {
+            update({ status: 'interrupted', message: 'La creación se interrumpió en el motor. Se conservan la descripción y los ajustes; no se repetirá automáticamente.' }); return
+          }
+          if (entry.status?.status_str === 'error' || entry.status?.messages?.some((message: any) => message?.[0] === 'execution_error')) {
+            classifiedFailure = this.classifyHistoryError(entry)
+            throw new Error(classifiedFailure.message)
+          }
           const image = entry.outputs?.['7']?.images?.[0]
           if (image && entry.status?.completed !== false) {
             update({ status: 'saving', message: 'Guardando tu imagen en la biblioteca…' })
             const imageId = await this.saveResult(origin, image, job, signal)
-            update({ status: 'completed', imageId, step: job.steps, message: 'Imagen creada y guardada en tu biblioteca.' })
+            update({ status: 'completed', imageId, step: job.steps, failure: null, message: 'Imagen creada y guardada en tu biblioteca.' })
             if (job.steps === this.configuration.configuration.parameters.steps && job.cfg === this.configuration.configuration.parameters.cfg) this.store.saveEvidence(this.profile.id, { hardwareKey: await this.hardwareKey(), engineVersion: this.engine.version || 'no informada', width: job.width, height: job.height, at: now() })
             this.options.changed('creation'); return
           }
@@ -327,7 +372,18 @@ export class CreationController {
       update({ status: 'interrupted', message: 'La espera superó treinta minutos. El trabajo no se repetirá automáticamente; puedes consultar su estado o cancelarlo.' })
     } catch (error) {
       const saved = this.store.job(job.id)
-      if (saved && !terminal(saved)) update({ status: signal.aborted ? 'interrupted' : 'failed', message: signal.aborted ? 'La creación se interrumpió. Se conserva la descripción y no se repetirá automáticamente.' : error instanceof Error ? error.message : 'No se pudo crear la imagen. La descripción se conserva.' })
+      if (saved && !terminal(saved)) {
+        if (signal.aborted) {
+          update({ status: 'interrupted', message: 'La creación se interrumpió. Se conserva la descripción y no se repetirá automáticamente.' })
+        } else {
+          const failure = classifiedFailure || classifyJobFailure({ errorMessage: error instanceof Error ? error.message : '' })
+          update({
+            status: 'failed',
+            failure: { kind: failure.kind, detail: failure.detail, node: failure.node },
+            message: classifiedFailure ? failure.message : (error instanceof Error && error.message && failure.kind === 'execution' ? error.message : failure.message)
+          })
+        }
+      }
     } finally { socket?.close() }
   }
   private async saveResult(origin: string, image: any, job: ImageJob, signal: AbortSignal) {
@@ -373,15 +429,20 @@ export class CreationController {
     if (await fileBytes(local)) {
       const content = await readFile(local)
       if (content.length >= 24 && content.subarray(0, 8).toString('hex') === '89504e470d0a1a0a' && content.readUInt32BE(16) === job.width && content.readUInt32BE(20) === job.height) {
-        const recovered = { ...job, status: 'completed' as const, imageId: job.id, message: 'Imagen recuperada del disco sin repetir la generación.' }; this.saveJob(recovered); return recovered
+        const recovered = { ...job, status: 'completed' as const, imageId: job.id, failure: null, message: 'Imagen recuperada del disco sin repetir la generación.' }; this.saveJob(recovered); return recovered
       }
     }
     // Only query the stored local origin. Never resubmit an interrupted generation.
     const history = await engineJson(job.engineUrl, `/history/${job.enginePromptId}`)
     const entry = history[job.enginePromptId]
-    if (!entry?.outputs?.['7']?.images?.[0] || entry.status?.status_str === 'error') throw new CreationError('Todavía no hay un resultado recuperable en ese motor. Puedes iniciar otra creación expresamente.')
+    if (entry && (entry.status?.status_str === 'error' || entry.status?.messages?.some((message: any) => message?.[0] === 'execution_error'))) {
+      const failure = this.classifyHistoryError(entry)
+      const failed: ImageJob = { ...job, status: 'failed', failure: { kind: failure.kind, detail: failure.detail, node: failure.node }, message: failure.message }
+      this.saveJob(failed); return failed
+    }
+    if (!entry?.outputs?.['7']?.images?.[0]) throw new CreationError('Todavía no hay un resultado recuperable en ese motor. Puedes iniciar otra creación expresamente.')
     const imageId = await this.saveResult(job.engineUrl, entry.outputs['7'].images[0], job, new AbortController().signal)
-    const recovered = { ...job, status: 'completed' as const, imageId, message: 'Imagen recuperada del motor sin repetir la generación.' }; this.saveJob(recovered); return recovered
+    const recovered = { ...job, status: 'completed' as const, imageId, failure: null, message: 'Imagen recuperada del motor sin repetir la generación.' }; this.saveJob(recovered); return recovered
   }
   artifact(id: string) {
     const job = this.store.job(id)

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { managedStateSchema, managedPlanSchema } from '@veltria/contracts'
 import { sessionSchema, settingsSchema, hardwareSchema, engineSchema, healthSchema, creationStateSchema, preparationPlanSchema, preparationSchema, jobSchema, librarySchema, resourcesSchema, type Settings, storageSchema, removalPlanSchema, discoverySchema, catalogSchema, configurationEntrySchema, setupStateSchema, setupPlanSchema } from '@veltria/contracts'
 import { videoPlanSchema, videoStateSchema, videoJobSchema, videoLibrarySchema } from '@veltria/contracts'
 let csrf = ''
@@ -26,6 +27,10 @@ export const api = {
   engine: () => request('/engine', engineSchema),
   check: () => request('/engine/check', engineSchema, 'POST', {}),
   setup: () => request('/setup', setupStateSchema),
+  managed: () => request('/setup/managed', managedStateSchema),
+  managedPlan: (directory?: string, allowSeparateInstallation = false) => request('/setup/managed/plan', managedPlanSchema, 'POST', { ...(directory ? { directory } : {}), allowSeparateInstallation }),
+  prepareManaged: (revision: string) => request('/setup/managed/prepare', managedStateSchema, 'POST', { revision, acceptInstallation: true, acceptLicense: true }),
+  pauseManaged: () => request('/setup/managed/pause', managedStateSchema, 'POST', {}),
   scanSetup: (directory?: string) => request('/setup/scan', setupStateSchema, 'POST', directory ? { directory } : {}),
   setupPlan: (scanId: string, installationId: string) => request('/setup/plan', setupPlanSchema, 'POST', { scanId, installationId }),
   prepareSetup: (revision: string) => request('/setup/prepare', preparationSchema, 'POST', { revision, acceptLicense: true, acceptReuse: true }),

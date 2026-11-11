@@ -21,7 +21,7 @@ async function run() {
   })
   ipcMain.handle('veltria:choose-engine-directory', async event => {
     if (!mainWindow || event.sender !== mainWindow.webContents || event.senderFrame !== mainWindow.webContents.mainFrame || new URL(event.senderFrame.url).origin !== origin) throw new Error('Solicitud de carpeta no autorizada.')
-    const result = await dialog.showOpenDialog(mainWindow, { title: t('Elegir carpeta de ComfyUI'), properties: ['openDirectory', 'dontAddToRecent'] })
+    const result = await dialog.showOpenDialog(mainWindow, { title: t('Elegir carpeta en este equipo'), properties: ['openDirectory', 'dontAddToRecent'] })
     return result.canceled ? null : result.filePaths[0] || null
   })
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {

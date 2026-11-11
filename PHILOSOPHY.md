@@ -4,7 +4,7 @@
 
 ## Empezar por la intención
 
-Crear una imagen debe comenzar con una descripción y elecciones comprensibles. Veltria detecta recursos y propone el conjunto modelo, componentes, receta y ajustes. Los nombres técnicos y los controles avanzados se pueden consultar sin convertirlos en requisitos del recorrido sencillo.
+Antes de la primera creación, la pantalla principal prepara el equipo: Veltria detecta recursos y propone el conjunto modelo, componentes, receta y ajustes. El editor permanece oculto hasta contar con un modelo preparado. Después, crear una imagen comienza con una descripción y elecciones comprensibles. Los nombres técnicos y los controles avanzados se pueden consultar sin convertirlos en requisitos del recorrido sencillo.
 
 La recomendación ayuda a elegir según el equipo. No decide qué debe imaginar la persona ni transforma su descripción de forma oculta. No necesita un LLM adicional.
 
@@ -16,7 +16,7 @@ La acción **Preparar mi equipo** muestra antes descarga pendiente, espacio fina
 
 Mostrar fases y progreso medible. Si no existe un denominador fiable, indicar actividad sin inventar porcentajes. Preparar no envía automáticamente una generación. Al terminar se habilita **Crear imagen**, conservando descripción y ajustes.
 
-Este recorrido es el objetivo de producto. La instalación administrada sigue pendiente: reutilizar un ComfyUI existente no basta para declarar la app lista para principiantes desde cero.
+Este recorrido es el objetivo de producto. La instalación administrada está implementada en desarrollo; su aceptación exige pruebas reales por plataforma y usabilidad. Reutilizar un ComfyUI existente no basta para declarar la app lista para principiantes desde cero.
 
 ## Modelos, adaptaciones y calidad
 

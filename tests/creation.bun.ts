@@ -105,10 +105,44 @@ test('cancelación por identificador y fallo del motor conservan descripción y 
     expect((await ctx.json(`/jobs/${job.id}`)).status).toBe('cancelled')
     await waitFor(() => ctx.json('/activity'), state => state.jobs === 0)
     ctx.fixture.complete = true; ctx.fixture.failure = true
-    const failed: any = await (await ctx.call('/jobs', 'POST', { requestId: crypto.randomUUID(), prompt: 'Another preserved description' })).json()
-    await waitFor(() => ctx.json(`/jobs/${failed.id}`), state => state.status === 'failed')
-    expect((await ctx.json(`/jobs/${failed.id}`)).prompt).toBe('Another preserved description')
+    ctx.fixture.failureDetails = { exception_type: 'torch.cuda.OutOfMemoryError', exception_message: 'CUDA out of memory. Tried to allocate 1024.00 MiB', node_type: 'KSampler' }
+    const oomQuality = { width: 768, height: 768, steps: 30, cfg: 6.5 }
+    const failed: any = await (await ctx.call('/jobs', 'POST', { requestId: crypto.randomUUID(), prompt: 'Another preserved description', format: 'square', quality: oomQuality })).json()
+    const failedState = await waitFor(() => ctx.json(`/jobs/${failed.id}`), state => state.status === 'failed')
+    expect(failedState).toMatchObject({ prompt: 'Another preserved description', format: 'square', width: 768, height: 768, steps: 30, cfg: 6.5, requestedQuality: oomQuality })
+    expect(typeof failedState.seed).toBe('number')
+    expect(failedState.failure).toMatchObject({ kind: 'memory', node: 'KSampler' })
+    expect(failedState.failure.detail).toContain('CUDA out of memory')
+    expect(failedState.message).toContain('memoria disponible')
+
+    ctx.fixture.failureDetails = { exception_type: 'RuntimeError', exception_message: 'size mismatch for model.diffusion_model.input_blocks', node_type: 'CheckpointLoaderSimple' }
+    const incompatible: any = await (await ctx.call('/jobs', 'POST', { requestId: crypto.randomUUID(), prompt: 'Incompatible checkpoint test' })).json()
+    const incompatibleState = await waitFor(() => ctx.json(`/jobs/${incompatible.id}`), state => state.status === 'failed')
+    expect(incompatibleState.failure).toMatchObject({ kind: 'incompatible', node: 'CheckpointLoaderSimple' })
+    expect(incompatibleState.message).not.toContain('memoria disponible')
+
+    ctx.fixture.failureDetails = { exception_type: 'ValueError', exception_message: 'NaN encountered during step', node_type: 'VAEDecode' }
+    const executionErr: any = await (await ctx.call('/jobs', 'POST', { requestId: crypto.randomUUID(), prompt: 'Internal execution error test' })).json()
+    const executionState = await waitFor(() => ctx.json(`/jobs/${executionErr.id}`), state => state.status === 'failed')
+    expect(executionState.failure).toMatchObject({ kind: 'execution', node: 'VAEDecode' })
+    expect(executionState.message).not.toContain('memoria disponible')
+
     const count = ctx.fixture.submissions.length; await Bun.sleep(200); expect(ctx.fixture.submissions).toHaveLength(count)
+    await ctx.server.close()
+    const reopened = await ctx.create()
+    try {
+      await Bun.sleep(150)
+      expect(ctx.fixture.submissions).toHaveLength(count)
+      const persistedOom = await reopened.json(`/jobs/${failed.id}`)
+      expect(persistedOom).toMatchObject({ id: failed.id, status: 'failed', prompt: 'Another preserved description', seed: failedState.seed, width: 768, height: 768, steps: 30, cfg: 6.5, requestedQuality: oomQuality, failure: { kind: 'memory', node: 'KSampler' } })
+      ctx.fixture.failure = false; ctx.fixture.failureDetails = null
+      const retry: any = await (await reopened.call('/jobs', 'POST', { requestId: crypto.randomUUID(), prompt: persistedOom.prompt, format: persistedOom.format })).json()
+      expect(retry.id).not.toBe(failed.id)
+      const recovered = await waitFor(() => reopened.json(`/jobs/${retry.id}`), state => state.status === 'completed')
+      expect(recovered.width).toBe(512); expect(recovered.steps).toBe(20)
+      expect((await reopened.json(`/jobs/${failed.id}`)).width).toBe(768)
+      expect((await reopened.json(`/jobs/${failed.id}`)).seed).toBe(failedState.seed)
+    } finally { await reopened.server.close() }
   } finally { await ctx.cleanup() }
 })
 
@@ -142,7 +176,7 @@ test('origen sin Range: continuar reinicia de forma segura sin duplicar bytes', 
   } finally { await ctx.cleanup() }
 })
 
-test('reinicio tras enviar: conserva el trabajo sin reenviar y recupera su resultado', async () => {
+test('reinicio tras enviar: conserva el trabajo sin reenviar y recupera su resultado o fallo real', async () => {
   const ctx = await setup(); ctx.fixture.complete = false; ctx.fixture.downloadDelay = 1
   try {
     await ctx.call('/settings', 'PATCH', { engineBinding: ctx.binding })
@@ -161,7 +195,25 @@ test('reinicio tras enviar: conserva el trabajo sin reenviar y recupera su resul
       expect((await recovery.json() as any).status).toBe('completed')
       expect(ctx.fixture.submissions).toHaveLength(count)
       expect((await reopened.json(`/jobs/${job.id}`)).prompt).toBe('Keep my interrupted input')
+
+      // Now test an interrupted job whose engine execution ended in an OOM error
+      ctx.fixture.complete = false
+      const job2: any = await (await reopened.call('/jobs', 'POST', { requestId: crypto.randomUUID(), prompt: 'Interrupted OOM job' })).json()
+      await waitFor(() => reopened.json(`/jobs/${job2.id}`), state => state.status === 'running')
     } finally { await reopened.server.close() }
+    const reopenedAgain = await ctx.create()
+    try {
+      const jobsList = (await reopenedAgain.json('/jobs')).jobs
+      const interruptedOom = jobsList.find((item: any) => item.prompt === 'Interrupted OOM job')
+      expect(interruptedOom.status).toBe('interrupted')
+      ctx.fixture.complete = true; ctx.fixture.failure = true
+      ctx.fixture.failureDetails = { exception_type: 'torch.cuda.OutOfMemoryError', exception_message: 'CUDA out of memory', node_type: 'VAEDecode' }
+      const reconciledFail = await reopenedAgain.call(`/jobs/${interruptedOom.id}/reconcile`, 'POST', {})
+      expect(reconciledFail.status).toBe(200)
+      const body: any = await reconciledFail.json()
+      expect(body.status).toBe('failed')
+      expect(body.failure).toMatchObject({ kind: 'memory', node: 'VAEDecode' })
+    } finally { await reopenedAgain.server.close() }
   } finally { await ctx.cleanup() }
 })
 

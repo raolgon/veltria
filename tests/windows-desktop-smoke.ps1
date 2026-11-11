@@ -7,6 +7,7 @@ try {
   $info = New-Object Diagnostics.ProcessStartInfo
   $info.FileName = if ($Executable) { $Executable } else { Join-Path $Root ('release\'+(Get-Content -Raw (Join-Path $Root 'package.json') | ConvertFrom-Json).version+'\win-unpacked\Veltria.exe') }
   $info.UseShellExecute = $false
+  $info.EnvironmentVariables.Remove('ELECTRON_RUN_AS_NODE')
   $info.EnvironmentVariables['VELTRIA_DATA_DIR'] = $data
   $p = [Diagnostics.Process]::Start($info)
   $path = Join-Path $data '.service-lock\instance.json'

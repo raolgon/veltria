@@ -26,13 +26,14 @@ El navegador intercambia un nonce de un uso, válido 60 segundos, por sesión y 
 
 ## API y eventos
 
-Prefijo `/api/v1`; protocolo **8**. Los esquemas compartidos validan solicitudes y respuestas. Las rutas concretas se mantienen en `apps/local-service/src/server.ts`.
+Prefijo `/api/v1`; protocolo **9**. Los esquemas compartidos validan solicitudes y respuestas. Las rutas concretas se mantienen en `apps/local-service/src/server.ts`.
 
 | Área | Rutas principales |
 | --- | --- |
 | Sesión/estado | `/session`, `/health`, `/identity`, `/activity` |
 | Preferencias/equipo | `/settings`, `/hardware`, `/resources`, `/engine`, `/engine/check` |
 | Búsqueda del motor | `/setup`, `/setup/scan`, `/setup/plan`, `/setup/prepare` |
+| Entorno administrado | `/setup/managed`, `/setup/managed/plan`, `/setup/managed/prepare`, `/setup/managed/pause` |
 | Modelos | `/catalog`, `/catalog/search`, `/catalog/browse`, `/catalog/adopt`, `/catalog/select` |
 | Configuraciones/archivos | `/catalog/configurations`, `/catalog/configurations/:id`, `/catalog/storage`, `/catalog/storage/plan`, `/catalog/storage/remove` |
 | Preparación de imagen | `/creation`, `/creation/plan`, `/creation/prepare`, `/creation/pause` |
@@ -60,7 +61,9 @@ Los perfiles/recetas están incluidos o pasan las comprobaciones acotadas de des
 
 Imagen y video no se ejecutan a la vez. La cancelación se dirige al trabajo propio, sin interrupción global de motores ajenos. Un envío incierto se reconcilia, no se reenvía automáticamente.
 
-La instalación administrada desde cero está **pendiente**. Su plan y ejecutor deben quedar en estas capas, con estado persistido, reanudación segura y entorno aislado; no introducir otro backend. [Recorrido objetivo](docs/setup.md).
+La instalación administrada vive en `apps/local-service/src/managed.ts`, con manifiestos fijados en `packages/core/src/managed`, contratos compartidos y una sección del asistente Vue. Añade estado, ubicación y autorización persistidos en tablas propias de SQLite, sin cambiar el esquema de trabajos 4. Descarga/verifica el conjunto, instala desde wheels offline y comprueba CUDA antes de preparar el modelo. No introduce otro backend. El Python propio desactiva la importación opcional de Triton para evitar exigir compilador del sistema. [Recorrido y validación](docs/managed-setup.md).
+
+Si existe otro motor, la instalación separada exige una elección explícita en el plan; esa decisión se incluye en su revisión y autorización. Windows fija wheels PyTorch `+cu126` de su índice oficial (receta v2), ya que los wheels PyPI Windows de la receta anterior eran CPU. Las URLs y hashes permanecen fijados en el servidor.
 
 ## Seguridad local
 

@@ -1,6 +1,6 @@
 # Veltria — decisiones vigentes
 
-Actualizado el 7 de noviembre de 2026. Nombre: **Veltria**. Identidad: **Obsidian**. Código en `apps/` y `packages/`; rama de trabajo `development`. [Estado de hitos](docs/status.md).
+Actualizado el 10 de noviembre de 2026. Nombre: **Veltria**. Identidad: **Obsidian**. Código en `apps/` y `packages/`; rama de trabajo `development`. [Estado de hitos](docs/status.md).
 
 ## Producto
 
@@ -12,7 +12,7 @@ La persona decide qué crear y Veltria hace la preparación pesada. El recorrido
 4. Mostrar descarga, espacio, ubicación, licencias y cambios; autorizar el conjunto una vez.
 5. Ejecutar preparación y verificación con progreso real y recuperación. Crear es una acción posterior.
 
-No exigir conocimientos de Python, CUDA, nodos, puertos o rutas de pesos. Los detalles avanzados permanecen accesibles. Reutilizar la instalación de ComfyUI de D en esta PC; la ruta sin motor se prueba en el laboratorio Linux separado. La instalación administrada todavía no está implementada.
+No exigir conocimientos de Python, CUDA, nodos, puertos o rutas de pesos. Los detalles avanzados permanecen accesibles. Reutilizar la instalación de ComfyUI de D en esta PC; la ruta sin motor se prueba en el laboratorio Linux separado. La instalación administrada está implementada en desarrollo; [receta y validación](docs/managed-setup.md).
 
 «Modelo» se refiere aquí al generador de imágenes. No se requiere un LLM adicional para recomendarlo ni para modificar las descripciones. Recomendaciones mediante reglas y evidencia local; no filtrar la intención creativa por categorías arbitrarias.
 
@@ -34,7 +34,7 @@ Equipo de referencia comprobado: Ryzen 5 7535HS, RTX 4050 Laptop de 6 GB y 16 GB
 
 Crear, Modelos, Biblioteca, Mi equipo y Ajustes; español/inglés; temas sistema/claro/oscuro; controles avanzados desplegables. Mantener Obsidian y la adaptación móvil. Mostrar sólo estados respaldados por el servicio. [PHILOSOPHY.md](PHILOSOPHY.md) define la aceptación de la experiencia.
 
-La prioridad es cerrar el hito 3 con instalación administrada y recuperación, antes de ampliar familias o presentar video como fiable. LAN sigue pendiente según [LOCAL-NETWORK.md](LOCAL-NETWORK.md). Audio, entrenamiento, workflows arbitrarios, nube y actualizaciones automáticas no están implementados.
+El hito 3 tiene instalación administrada y bienvenida principal implementadas; su aceptación por plataformas y usabilidad sigue pendiente. El siguiente incremento funcional propuesto es la recuperación guiada del hito 4; [comparación y criterios](docs/milestone-4.md). No ampliar familias ni presentar video como fiable para cerrar esos pendientes. LAN sigue pendiente según [LOCAL-NETWORK.md](LOCAL-NETWORK.md). Audio, entrenamiento, workflows arbitrarios, nube y actualizaciones automáticas no están implementados.
 
 ## Trabajo y validación
 
