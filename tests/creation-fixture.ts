@@ -25,7 +25,9 @@ export class CreationFixture {
   submissions: any[] = []
   cancellations: string[] = []
   complete = true
+  memoryModes: (string|undefined)[] = []
   failure = false
+  failureDetails: Record<string, any> | null = null
   wrongHash = false
   ignoreRange = false
   downloadDelay = 12
@@ -53,7 +55,7 @@ export class CreationFixture {
         return new Response(stream, { status: start ? 206 : 200, headers: { 'content-length': String(this.bytes.length - start), ...(start ? { 'content-range': `bytes ${start}-${this.bytes.length - 1}/${this.bytes.length}` } : {}) } })
       }
       if (path === '/system_stats') return Response.json({ system: { comfyui_version: 'fixture-no-GPU' }, devices: [{ name: 'Dispositivo de prueba' }] })
-      if (path === '/object_info') return Response.json(Object.fromEntries(recipeNodes.map(node => [node, node === 'CheckpointLoaderSimple' ? { input: { required: { ckpt_name: [[this.profile.filename]] } } } : {}])))
+      if (path === '/object_info') return Response.json(Object.fromEntries([...recipeNodes, 'LoraLoader'].map(node => [node, node === 'CheckpointLoaderSimple' ? { input: { required: { ckpt_name: [[this.profile.filename]] } } } : {}])))
       if (path === '/queue') return Response.json({ queue_running: [], queue_pending: [] })
       if (path === '/prompt' && request.method === 'POST') {
         const input: any = await request.json(); this.submissions.push(input); this.accepted.set(input.prompt_id, input)
@@ -62,7 +64,7 @@ export class CreationFixture {
       if (path.startsWith('/history/')) {
         const id = path.split('/').pop()!, input = this.accepted.get(id)
         if (!input || !this.complete || this.cancellations.includes(id)) return Response.json({})
-        return Response.json({ [id]: this.failure ? { status: { status_str: 'error', completed: false, messages: [['execution_error', {}]] } } : { status: { completed: true, status_str: 'success' }, outputs: { '7': { images: [{ filename: `veltria_${id}_00001_.png`, type: 'output', subfolder: '' }] } } } })
+        return Response.json({ [id]: this.failure ? { status: { status_str: 'error', completed: false, messages: [['execution_error', this.failureDetails || {}]] } } : { status: { completed: true, status_str: 'success' }, outputs: { '7': { images: [{ filename: `veltria_${id}_00001_.png`, type: 'output', subfolder: '' }] } } } })
       }
       if (/^\/api\/jobs\/[a-f0-9-]+\/cancel$/.test(path)) { const id = path.split('/')[3]; this.cancellations.push(id); return Response.json({ cancelled: true }) }
       if (path === '/view') {
@@ -74,7 +76,7 @@ export class CreationFixture {
     } })
     const fixture = this
     this.profile = { ...starterProfile, id: 'fixture-profile', title: 'Perfil de prueba · sin GPU', bytes: this.bytes.length, sha256: createHash('sha256').update(this.bytes).digest('hex'), filename: 'fixture-only.safetensors', url: `http://127.0.0.1:${this.server.port}/checkpoint`, description: 'Fixture de pruebas, no un perfil distribuido.' }
-    this.engine = { origin: null, version: 'fixture-no-GPU', async start() { (this as any).origin = `http://127.0.0.1:${fixture.server.port}` }, async stop() { (this as any).origin = null } }
+    this.engine = { origin: null, version: 'fixture-no-GPU', async start(...args: any[]) { fixture.memoryModes.push(args[4]); (this as any).origin = `http://127.0.0.1:${fixture.server.port}` }, async stop() { (this as any).origin = null } }
   }
   async binding(directory: string): Promise<NonNullable<Settings['engineBinding']>> {
     const root = join(directory, 'existing engine fixture'); await mkdir(join(root, 'comfy'), { recursive: true })

@@ -1,9 +1,10 @@
 import { z } from 'zod'
-import { sessionSchema, settingsSchema, hardwareSchema, engineSchema, healthSchema, creationStateSchema, preparationPlanSchema, preparationSchema, jobSchema, librarySchema, resourcesSchema, type Settings, catalogSchema, configurationEntrySchema, setupStateSchema, setupPlanSchema } from '@veltria/contracts'
+import { managedStateSchema, managedPlanSchema } from '@veltria/contracts'
+import { sessionSchema, settingsSchema, hardwareSchema, engineSchema, healthSchema, creationStateSchema, preparationPlanSchema, preparationSchema, jobSchema, librarySchema, resourcesSchema, type Settings, storageSchema, removalPlanSchema, discoverySchema, catalogSchema, configurationEntrySchema, setupStateSchema, setupPlanSchema } from '@veltria/contracts'
 import { videoPlanSchema, videoStateSchema, videoJobSchema, videoLibrarySchema } from '@veltria/contracts'
 let csrf = ''
 async function request<T>(path: string, schema: z.ZodType<T>, method = 'GET', body?: unknown): Promise<T> {
-  const response = await fetch(`/api/v1${path}`, { method, credentials: 'same-origin', headers: { ...(body !== undefined ? { 'content-type': 'application/json' } : {}), ...(method !== 'GET' ? { 'x-veltria-csrf': csrf } : {}) }, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(path === '/hardware' ? 15_000 : path === '/resources' ? 4000 : 12_000) })
+  const response = await fetch(`/api/v1${path}`, { method, credentials: 'same-origin', headers: { ...(body !== undefined ? { 'content-type': 'application/json' } : {}), ...(method !== 'GET' ? { 'x-veltria-csrf': csrf } : {}) }, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(path === '/catalog/storage/remove' ? 120_000 : path.startsWith('/catalog/') ? 35_000 : path === '/hardware' ? 15_000 : path === '/resources' ? 4000 : 12_000) })
   if (!response.ok) {
     const detail = await response.json().catch(() => null)
     throw new Error(detail?.message || `El servicio respondió HTTP ${response.status}. Vuelve a intentarlo.`)
@@ -26,9 +27,19 @@ export const api = {
   engine: () => request('/engine', engineSchema),
   check: () => request('/engine/check', engineSchema, 'POST', {}),
   setup: () => request('/setup', setupStateSchema),
+  managed: () => request('/setup/managed', managedStateSchema),
+  managedPlan: (directory?: string, allowSeparateInstallation = false) => request('/setup/managed/plan', managedPlanSchema, 'POST', { ...(directory ? { directory } : {}), allowSeparateInstallation }),
+  prepareManaged: (revision: string) => request('/setup/managed/prepare', managedStateSchema, 'POST', { revision, acceptInstallation: true, acceptLicense: true }),
+  pauseManaged: () => request('/setup/managed/pause', managedStateSchema, 'POST', {}),
   scanSetup: (directory?: string) => request('/setup/scan', setupStateSchema, 'POST', directory ? { directory } : {}),
   setupPlan: (scanId: string, installationId: string) => request('/setup/plan', setupPlanSchema, 'POST', { scanId, installationId }),
   prepareSetup: (revision: string) => request('/setup/prepare', preparationSchema, 'POST', { revision, acceptLicense: true, acceptReuse: true }),
+  browseCompatible: (kind: string, cursor?: string) => request('/catalog/browse', discoverySchema, 'POST', { kind, ...(cursor ? { cursor } : {}) }),
+  discover: (query: string, kind = 'all') => request('/catalog/search', discoverySchema, 'POST', { query, kind }),
+  adoptModel: (repository: string, file: string, strength = 0.7, baseModelId = 'sd15-starter') => request('/catalog/adopt', configurationEntrySchema, 'POST', { repository, file, strength, baseModelId }),
+  storage: () => request('/catalog/storage', storageSchema),
+  removalPlan: (id:string) => request('/catalog/storage/plan', removalPlanSchema, 'POST', {id}),
+  removeFile: (id:string, revision:string, acceptShared:boolean) => request('/catalog/storage/remove', storageSchema, 'POST', {id,revision,acceptShared}),
   catalog: () => request('/catalog', catalogSchema),
   selectConfiguration: (configurationId: string) => request('/catalog/select', creationStateSchema, 'POST', { configurationId }),
   importConfiguration: (configuration: unknown) => request('/catalog/configurations', configurationEntrySchema, 'POST', configuration),
@@ -36,7 +47,7 @@ export const api = {
   plan: () => request('/creation/plan', preparationPlanSchema),
   prepare: (revision: string) => request('/creation/prepare', preparationSchema, 'POST', { revision, acceptLicense: true }),
   pause: () => request('/creation/pause', preparationSchema, 'POST', {}),
-  create: (input: { requestId: string; prompt: string; format: 'square' | 'landscape' | 'portrait' }) => request('/jobs', jobSchema, 'POST', input),
+  create: (input: import('@veltria/contracts').CreateImageInput) => request('/jobs', jobSchema, 'POST', input),
   jobs: (offset = 0) => request(`/jobs?offset=${offset}&limit=24`, librarySchema),
   cancel: (id: string) => request(`/jobs/${id}/cancel`, jobSchema, 'POST', {}),
   reconcile: (id: string) => request(`/jobs/${id}/reconcile`, jobSchema, 'POST', {}),

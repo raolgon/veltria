@@ -1,11 +1,16 @@
-# Veltria UI prototype
+# Prototipo visual de Veltria
 
-Abrir veltria.html sin instalar nada. Ver ../UI-PREVIEW.md para alcance, cambios y comprobaciones.
+Abrir `veltria.html` para revisar la referencia Obsidian. [Alcance](../UI-PREVIEW.md), [diseño vigente](../DESIGN.md) y [aplicación real](../README.md).
 
-Fuente: src/App.vue, src/IdeaArt.vue y src/style.css. Los perfiles, hardware, compatibilidad, progreso e instalación son escenarios de diseño. El producto usará el servicio Bun/Fastify; este prototipo no lo implementa.
+Fuente en `src/`: Vue/TypeScript, CSS e ilustración propia. Hardware, perfiles, progreso y preparación son escenarios de diseño. No hay motor, servicio ni inferencia; no copiar sus temporizadores como lógica de producto.
 
-Desarrollo previsto con Bun: bun install y bunx --bun vite. La verificación de esta entrega usó Node por disponibilidad del entorno. Los scripts npm de desarrollo son una herramienta de revisión, no un backend Node de producto. Fijar bun.lock al integrar con Bun; no se incluye uno sin haberlo generado.
+El paquete independiente declara `dev`, `typecheck` y `build` en `package.json`. Para trabajar específicamente en esta referencia, desde esta carpeta:
 
-Build usado en esta entrega: npm run build. Comprueba tipos, compila y genera veltria.html autocontenido. No hay fuentes ni recursos remotos en la vista compilada.
+```bash
+bun install
+bun run dev
+# Compilar el HTML autocontenido:
+bun run build
+```
 
-No distribuir node_modules ni los archivos de configuración interna de la vista previa. No convertir temporizadores de ejemplo en lógica de instalación real.
+El build comprueba tipos, ejecuta Vite y `standalone.mjs`. No sustituye las comprobaciones del workspace de producción. No distribuir dependencias de desarrollo con el HTML ni modificar el producto por interpretar datos de ejemplo como requisitos.

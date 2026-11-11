@@ -208,7 +208,7 @@ test('idioma: cambio inmediato, dos ventanas, reapertura, contenido propio y mó
   expect(errors).toEqual([])
 })
 
-test('catálogo real: dos modelos, configuraciones, plan y navegación en escritorio y móvil', async ({ page }) => {
+test('catálogo real: tres modelos, configuraciones, plan y navegación en escritorio y móvil', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message))
   await page.goto(await launchUrl())
   await expect(page.getByText('Servicio local conectado')).toBeVisible()
@@ -222,12 +222,13 @@ test('catálogo real: dos modelos, configuraciones, plan y navegación en escrit
     await page.setViewportSize({ width, height })
     const nav = width <= 740 ? page.locator('.mobile-nav') : page.locator('.sidebar nav')
     await nav.getByRole('button', { name: locale === 'en' ? 'Models' : 'Modelos', exact: true }).click()
-    await expect(page.locator('.model-row')).toHaveCount(2)
-    await expect(page.locator('.model-row').last()).toContainText('DreamShaper 8')
+    await page.getByRole('button', { name: locale === 'en' ? 'Explore all' : 'Explorar todo', exact: true }).click()
+    await expect(page.locator('.model-row')).toHaveCount(3)
+    await expect(page.locator('.model-row').last()).toContainText('Stable Diffusion XL')
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
     await page.screenshot({ path: `test-results/catalog-${locale}-${theme}-${width}.png`, fullPage: true })
   }
-  await page.locator('.model-row').last().getByRole('button', { name: 'Review download', exact: true }).click()
+  await page.locator('.model-row').filter({hasText:'DreamShaper 8'}).getByRole('button', { name: 'Review download', exact: true }).click()
   const plan = page.getByRole('dialog')
   await expect(plan).toBeVisible()
   await expect(plan.getByRole('heading', { name: 'Prepare my computer', exact: true })).toBeVisible()
@@ -238,4 +239,75 @@ test('catálogo real: dos modelos, configuraciones, plan y navegación en escrit
   await page.locator('.sidebar nav').getByRole('button', { name: 'Models', exact: true }).click()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   expect(errors).toEqual([])
+})
+
+test('descubrimiento: intención, filtros, resultados externos y fallo recuperable sin perder el catálogo', async ({ page }) => {
+  await page.goto(await launchUrl())
+  await expect(page.getByText(/Servicio local conectado|Local service connected/)).toBeVisible()
+  await page.evaluate(async () => { const session = await fetch('/api/v1/session').then(r => r.json()); await fetch('/api/v1/settings', {method:'PATCH', headers:{'content-type':'application/json','x-veltria-csrf':session.csrf},body:JSON.stringify({locale:'es'})}) })
+  await page.locator('.sidebar nav').getByRole('button', {name:'Modelos', exact:true}).click()
+  await page.getByRole('button', {name:'Explorar todo',exact:true}).click()
+  await page.getByRole('button', {name:'Ilustración',exact:true}).click()
+  await expect(page.locator('.model-row')).toHaveCount(1)
+  await expect(page.locator('.model-row')).toContainText('DreamShaper')
+  await page.locator('#model-search').fill('sin coincidencias')
+  await expect(page.getByText('No hay coincidencias en tu catálogo. Prueba otra búsqueda o explora todo.',{exact:true})).toBeVisible()
+  await page.route('**/api/v1/catalog/search', route => route.fulfill({status:200, contentType:'application/json', body:JSON.stringify({partial:false,results:[{repository:'fixture/Illustration', revision:'a'.repeat(40),kind:'lora',family:'SD 1.5',supported:true,files:[{name:'style.safetensors',bytes:1024}],reason:'Familia declarada compatible; ejecución sin comprobar.',source:'https://huggingface.co/fixture/Illustration'}]})}))
+  await page.getByRole('button',{name:'Buscar en Internet',exact:true}).click()
+  await expect(page.getByRole('heading',{name:'Illustration',exact:true})).toBeVisible()
+  await expect(page.getByRole('button',{name:'Preparar y usar',exact:true})).toBeVisible()
+  await page.locator('.discovery-results summary').click()
+  await expect(page.getByLabel('Intensidad de la adaptación')).toHaveValue('0.7')
+  for (const [width,height] of [[1363,900],[320,568]]) { await page.setViewportSize({width,height}); expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true); await page.screenshot({path:`test-results/discovery-${width}.png`,fullPage:true}) }
+  await page.route('**/api/v1/catalog/search', route => route.fulfill({status:502, contentType:'application/json',body:JSON.stringify({message:'Proveedor no disponible. Vuelve a buscar.'})}))
+  await page.getByRole('button',{name:'Buscar en Internet',exact:true}).click()
+  await expect(page.getByRole('alert')).toContainText('Proveedor no disponible')
+  await page.locator('#model-search').fill('')
+  await expect(page.locator('.model-row')).toHaveCount(3)
+})
+
+test('explorar compatibles sin texto: popularidad, más páginas y conservación ante fallos', async ({page}) => {
+  await page.route('**/api/v1/creation', async route => {const response=await route.fetch();const state=await response.json();state.recommendation.level='recommended';await route.fulfill({response,json:state})})
+  await page.goto(await launchUrl())
+  await page.evaluate(async()=>{const s=await fetch('/api/v1/session').then(r=>r.json());await fetch('/api/v1/settings',{method:'PATCH',headers:{'content-type':'application/json','x-veltria-csrf':s.csrf},body:JSON.stringify({locale:'es'})})})
+  await page.locator('.sidebar nav').getByRole('button',{name:'Modelos',exact:true}).click()
+  const entry=(name:string,downloads:number)=>({repository:'fixture/'+name,revision:'a'.repeat(40),kind:'model',family:'SD 1.5',supported:true,files:[{name:'full.safetensors',bytes:1024}],reason:'Familia declarada compatible; ejecución sin comprobar.',source:'https://huggingface.co/fixture/'+name,downloads})
+  let calls=0
+  await page.route('**/api/v1/catalog/browse',async route=>{
+    const body=route.request().postDataJSON();expect(body).not.toHaveProperty('query');calls++
+    if(calls===1)await route.fulfill({json:{results:[entry('Less',10),entry('Popular',200)],partial:false,nextCursor:'second'}})
+    else if(calls===2){expect(body.cursor).toBe('second');await route.fulfill({json:{results:[entry('Less',10),entry('Next',5)],partial:false,nextCursor:'third'}})}
+    else await route.fulfill({status:502,json:{message:'No se pudo consultar el proveedor.'}})
+  })
+  await page.locator('#model-search').fill('idea anterior')
+  await page.getByRole('button',{name:'Ver modelos para mi equipo',exact:true}).click()
+  await expect(page.locator('#model-search')).toHaveValue('')
+  await expect(page.locator('.discovery-results h3').first()).toHaveText('Popular')
+  await expect(page.locator('.discovery-results')).toContainText('200 descargas')
+  await page.getByRole('button',{name:'Ver más modelos',exact:true}).click()
+  await expect(page.locator('.discovery-results h3')).toHaveText(['Popular','Less','Next'])
+  for(const [width,height] of [[1363,900],[320,568]]){await page.setViewportSize({width,height});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:`test-results/compatible-browse-${width}.png`,fullPage:true})}
+  await page.getByRole('button',{name:'Ver más modelos',exact:true}).click()
+  await expect(page.getByRole('alert')).toContainText('No se pudo consultar')
+  await expect(page.locator('.discovery-results h3')).toHaveCount(3)
+})
+
+test('recomendaciones: reutilizar primero, popularidad opcional y ajustes visibles',async({page})=>{
+  await page.route('**/api/v1/catalog',async route=>{
+    const response=await route.fetch(), catalog=await response.json()
+    for(const model of catalog.models){model.recommendation.level='recommended';model.recommendation.verified=false;model.status='missing'}
+    catalog.models[1].status='prepared'
+    await route.fulfill({response,json:catalog})
+  })
+  await page.goto(await launchUrl())
+  await page.evaluate(async()=>{const s=await fetch('/api/v1/session').then(r=>r.json());await fetch('/api/v1/settings',{method:'PATCH',headers:{'content-type':'application/json','x-veltria-csrf':s.csrf},body:JSON.stringify({locale:'es'})})})
+  await page.locator('.sidebar nav').getByRole('button',{name:'Modelos',exact:true}).click()
+  await expect(page.locator('.catalog-guidance')).toContainText('DreamShaper')
+  await expect(page.locator('.model-row').first()).toContainText('DreamShaper')
+  await expect(page.locator('.starting-settings').first()).toContainText('512 × 512')
+  await page.locator('#catalog-order').selectOption('popular')
+  await expect(page.locator('.catalog-guidance')).toHaveCount(0)
+  await expect(page.locator('.model-row').first()).toContainText('Stable Diffusion')
+  await page.locator('#catalog-order').selectOption('recommended')
+  for(const [width,height] of [[1363,900],[320,568]]){await page.setViewportSize({width,height});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:`test-results/guidance-${width}.png`,fullPage:true})}
 })

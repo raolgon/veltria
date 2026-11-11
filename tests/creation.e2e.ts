@@ -206,3 +206,174 @@ test('catálogo: guarda JSON, valida importación y usa la configuración en Cre
   await expect(entry).toContainText(configuration.name)
   await expect(entry).toContainText('CFG 4.5')
 })
+
+test('calidad: tamaño, pasos, CFG, límites y ajustes conservados al crear', async ({ page }) => {
+ const origin = new URL(url).origin
+ const launch = await fetch(`${origin}/api/v1/control/launch`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-veltria-control': 'a'.repeat(64) }, body: '{}' }).then(r => r.json()) as { nonce: string }
+ await page.goto(`${origin}/#launch=${launch.nonce}`)
+ await page.evaluate(async () => { const session = await fetch('/api/v1/session').then(r => r.json()); await fetch('/api/v1/settings', { method: 'PATCH', headers: { 'content-type': 'application/json', 'x-veltria-csrf': session.csrf }, body: JSON.stringify({ locale: 'en' }) }) })
+ await expect(page.getByLabel('Image size', { exact: true })).toBeVisible()
+ await page.getByRole('button', { name: 'Square', exact: true }).click()
+ await page.getByLabel('Image size', { exact: true }).selectOption('768')
+ await page.getByLabel('Generation effort').selectOption('30')
+ await page.getByText('Adjust manually', { exact: true }).click()
+ await page.getByLabel('CFG', { exact: true }).fill('6.5')
+ await page.getByLabel('Width (px)').fill('500')
+ await expect(page.getByRole('alert').filter({ hasText: 'Check the values' })).toBeVisible()
+ await page.getByLabel('Describe what you imagine').fill('A mountain lake, quality fixture')
+ await expect(page.getByRole('button', { name: 'Create image', exact: true }).first()).toBeDisabled()
+ await page.getByLabel('Width (px)').fill('768')
+ await expect(page.locator('.quality-summary')).toContainText('768 × 768 px · 30 steps · CFG 6.5')
+ for (const [width, height] of [[1363, 900], [320, 568]]) {
+  await page.setViewportSize({ width, height })
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await page.getByLabel('Width (px)').blur()
+  await page.evaluate(() => window.scrollTo(0, 0))
+  await page.screenshot({ path: `test-results/image-quality-${width}.png`, fullPage: true })
+ }
+ await page.setViewportSize({ width: 1363, height: 900 })
+ await page.reload()
+ await expect(page.locator('.quality-summary')).toContainText('768 × 768 px · 30 steps · CFG 6.5')
+ await page.getByRole('button', { name: 'Create image', exact: true }).first().click()
+ await expect(page.getByRole('link', { name: 'Save image', exact: true })).toBeVisible({ timeout: 15000 })
+ const job = await page.evaluate(() => fetch('/api/v1/jobs').then(r => r.json()).then(r => r.jobs[0]))
+ expect(job).toMatchObject({ width: 768, height: 768, steps: 30, cfg: 6.5 })
+ await page.getByRole('button', { name: 'Reset model settings' }).click()
+ await expect(page.locator('.quality-summary')).toContainText('512 × 512 px · 12 steps · CFG 4.5')
+})
+
+test('gestión de descarga real de fixture: revisar, cancelar, retirar y conservar la biblioteca',async({page})=>{
+ const origin=new URL(url).origin
+ const launch=await fetch(`${origin}/api/v1/control/launch`,{method:'POST',headers:{'content-type':'application/json','x-veltria-control':'a'.repeat(64)},body:'{}'}).then(r=>r.json()) as {nonce:string}
+ await page.goto(`${origin}/#launch=${launch.nonce}`)
+ await page.evaluate(async()=>{const s=await fetch('/api/v1/session').then(r=>r.json());await fetch('/api/v1/settings',{method:'PATCH',headers:{'content-type':'application/json','x-veltria-csrf':s.csrf},body:JSON.stringify({locale:'es'})})})
+ const before=await page.evaluate(()=>fetch('/api/v1/jobs').then(r=>r.json()))
+ await page.locator('.sidebar nav').getByRole('button',{name:'Modelos',exact:true}).click()
+ await page.getByRole('button',{name:'Gestionar descargas',exact:true}).click()
+ await expect(page.locator('.stored-file')).toHaveCount(1)
+ await page.locator('.stored-file').getByRole('button',{name:'Revisar retirada',exact:true}).click()
+ await expect(page.locator('.removal-review')).toBeVisible()
+ for(const [width,height]of [[1363,900],[320,568]]){await page.setViewportSize({width,height});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:`test-results/storage-${width}.png`,fullPage:true})}
+ await page.getByRole('button',{name:'Cancelar',exact:true}).click()
+ await expect(page.locator('.stored-file')).toHaveCount(1)
+ await page.locator('.stored-file').getByRole('button',{name:'Revisar retirada',exact:true}).click()
+ await page.getByRole('button',{name:'Retirar archivo',exact:true}).click()
+ await expect(page.locator('.stored-file')).toHaveCount(0)
+ await expect(page.getByText('Se retiró el archivo. Tus creaciones y configuraciones se conservan.',{exact:true})).toBeVisible()
+ const after=await page.evaluate(()=>fetch('/api/v1/jobs').then(r=>r.json()))
+ expect(after.total).toBe(before.total)
+ await page.getByRole('button',{name:'Volver al catálogo',exact:true}).click()
+ await expect(page.locator('.model-row').first()).toContainText('Sin descargar')
+})
+
+test('recuperación guiada: clasifica fallos reales, propone reducción revisable en falta de memoria y exige acción explícita tras recargar', async ({ page }) => {
+  const origin = new URL(url).origin
+  const launch = await fetch(`${origin}/api/v1/control/launch`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-veltria-control': 'a'.repeat(64) }, body: '{}' }).then(r => r.json()) as { nonce: string }
+  await page.goto(`${origin}/#launch=${launch.nonce}`)
+  await page.evaluate(async () => {
+    const s = await fetch('/api/v1/session').then(r => r.json())
+    await fetch('/api/v1/settings', { method: 'PATCH', headers: { 'content-type': 'application/json', 'x-veltria-csrf': s.csrf }, body: JSON.stringify({ locale: 'es' }) })
+    const plan = await fetch('/api/v1/creation/plan').then(r => r.json())
+    await fetch('/api/v1/creation/prepare', { method: 'POST', headers: { 'content-type': 'application/json', 'x-veltria-csrf': s.csrf }, body: JSON.stringify({ revision: plan.revision, acceptLicense: true }) })
+  })
+  await expect(page.getByLabel('Describe lo que imaginas')).toBeVisible({ timeout: 15000 })
+
+  let postCount = 0
+  const oomId = crypto.randomUUID(), incompatibleId = crypto.randomUUID()
+  const injectedJobs: Record<string, unknown>[] = []
+  await page.route('**/api/v1/jobs*', async (route, request) => {
+    if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/v1/jobs') {
+      postCount++
+      const body = JSON.parse(request.postData() || '{}')
+      if (body.quality?.width === 768) {
+        const job = {
+          id: oomId, requestId: body.requestId, profileId: 'fixture-profile', status: 'failed',
+          prompt: body.prompt, format: body.format, seed: 424242, width: 768, height: 768,
+          steps: 30, step: null, cfg: 6.5, requestedQuality: body.quality,
+          enginePromptId: oomId, engineUrl: 'http://127.0.0.1:8188', engineVersion: 'fixture-no-GPU',
+          profileRevision: 'sd15-fp16-euler-20-v1', imageId: null,
+          createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+          message: 'Se agotó la memoria disponible al crear la imagen. Se conservan tu descripción y ajustes; puedes reducir el tamaño o elegir un modelo menos exigente antes de volver a crear.',
+          failure: { kind: 'memory', node: 'KSampler', detail: 'torch.cuda.OutOfMemoryError: CUDA out of memory. Tried to allocate 1.50 GiB' }
+        }
+        injectedJobs.unshift(job)
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(job) })
+        return
+      }
+      if (body.prompt.includes('incompatible test')) {
+        const job = {
+          id: incompatibleId, requestId: body.requestId, profileId: 'fixture-profile', status: 'failed',
+          prompt: body.prompt, format: body.format, seed: 111222, width: 512, height: 512,
+          steps: 12, step: null, cfg: 4.5,
+          enginePromptId: incompatibleId, engineUrl: 'http://127.0.0.1:8188', engineVersion: 'fixture-no-GPU',
+          profileRevision: 'sd15-fp16-euler-20-v1', imageId: null,
+          createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+          message: 'El modelo o sus ajustes no son compatibles con esta receta en el motor. Se conservan tu descripción y ajustes; prueba otra configuración o modelo.',
+          failure: { kind: 'incompatible', node: 'CheckpointLoaderSimple', detail: 'RuntimeError: size mismatch for model.diffusion_model' }
+        }
+        injectedJobs.unshift(job)
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(job) })
+        return
+      }
+    }
+    const response = await route.fetch()
+    if (request.method() === 'GET' && new URL(request.url()).pathname === '/api/v1/jobs') {
+      const json = await response.json()
+      await route.fulfill({ response, json: { ...json, jobs: [...injectedJobs, ...json.jobs], total: json.total + injectedJobs.length } })
+      return
+    }
+    await route.fulfill({ response })
+  })
+
+  await page.getByRole('button', { name: 'Cuadrado', exact: true }).click()
+  await page.getByLabel('Tamaño de imagen', { exact: true }).selectOption('768')
+  await page.getByLabel('Esfuerzo de generación').selectOption('30')
+  await page.getByLabel('Describe lo que imaginas').fill('Catedral sumergida al amanecer')
+  await page.getByRole('button', { name: 'Crear imagen', exact: true }).first().click()
+  expect(postCount).toBe(1)
+
+  const feedback = page.locator('.creation-feedback')
+  await expect(feedback.locator('.pill')).toHaveText('Memoria insuficiente')
+  await expect(feedback).toContainText('Propuesta para reducir el uso de memoria: 512 × 512 px · 20 pasos')
+  await feedback.getByText('Ajustes y diagnóstico de este intento', { exact: true }).click()
+  await expect(feedback).toContainText('Semilla 424242')
+  await expect(feedback).toContainText('CUDA out of memory')
+
+  // Simulate reopening in a fresh browser session (clearing sessionStorage) and verify persisted job restores prompt + settings without auto-resubmitting
+  await page.evaluate(() => sessionStorage.clear())
+  await page.reload()
+  await expect(feedback.locator('.pill')).toHaveText('Memoria insuficiente')
+  await expect(page.getByLabel('Describe lo que imaginas')).toHaveValue('Catedral sumergida al amanecer')
+  await expect(page.locator('.quality-summary')).toContainText('768 × 768 px · 30 pasos')
+  expect(postCount).toBe(1)
+
+  await feedback.getByRole('button', { name: 'Usar 512 × 512 px (20 pasos)', exact: true }).click()
+  await expect(feedback).toContainText('Ajustes reducidos listos para revisar.')
+  await expect(page.locator('.quality-summary')).toContainText('512 × 512 px · 20 pasos')
+  // Applying the reduction does not auto-submit; user must explicitly click Create image
+  expect(postCount).toBe(1)
+  await page.getByRole('button', { name: 'Crear imagen', exact: true }).first().click()
+  await expect(page.getByRole('link', { name: 'Guardar imagen', exact: true })).toBeVisible({ timeout: 15000 })
+  expect(postCount).toBe(2)
+
+  // Non-memory error does not claim OOM or offer memory size reduction
+  await page.getByLabel('Describe lo que imaginas').fill('Un bosque de cristal · incompatible test')
+  await page.getByRole('button', { name: 'Crear imagen', exact: true }).first().click()
+  await expect(feedback.locator('.pill')).toHaveText('Ajustes o modelo incompatibles')
+  await expect(feedback).not.toContainText('memoria')
+  await expect(feedback.getByRole('button', { name: 'Elegir otro modelo', exact: true })).toBeVisible()
+  expect(postCount).toBe(3)
+
+  // Verify library preserves all attempts and allows reusing failed job with its original parameters
+  await page.locator('.sidebar nav').getByRole('button', { name: 'Biblioteca', exact: true }).click()
+  const oomEntry = page.locator('.library-entry').filter({ hasText: 'Catedral sumergida al amanecer' }).filter({ hasText: 'Memoria insuficiente' })
+  await expect(oomEntry).toBeVisible()
+  await oomEntry.getByText('Ajustes de la creación', { exact: true }).click()
+  await expect(oomEntry).toContainText('Semilla 424242')
+  await expect(oomEntry).toContainText('KSampler')
+  await oomEntry.getByRole('button', { name: 'Usar descripción', exact: true }).click()
+  await expect(page.getByLabel('Describe lo que imaginas')).toHaveValue('Catedral sumergida al amanecer')
+  await expect(page.locator('.quality-summary')).toContainText('768 × 768 px · 30 pasos')
+  expect(postCount).toBe(3)
+})
+

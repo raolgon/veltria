@@ -1,65 +1,43 @@
 # Veltria — decisiones vigentes
 
-Actualizado el 5 de noviembre de 2026. Nombre provisional: Veltria. Identificador técnico: veltria. Dirección visual: Obsidian, con temas oscuro, claro y sistema.
+Actualizado el 10 de noviembre de 2026. Nombre: **Veltria**. Identidad: **Obsidian**. Código en `apps/` y `packages/`; rama de trabajo `development`. [Estado de hitos](docs/status.md).
 
-## Filosofía obligatoria
+## Producto
 
-**La persona decide qué quiere crear. Veltria prepara lo necesario para hacerlo en su equipo.** Seguir PHILOSOPHY.md: tareas comprensibles primero, perfiles recomendados, preparación completa con una acción, LoRA con compatibilidad explícita, detalles técnicos progresivos y recuperación dentro de la app. Automatizar la mecánica y mantener visibles las decisiones sobre descarga, ubicación, licencia, calidad y cambios importantes.
+La persona decide qué crear y Veltria hace la preparación pesada. El recorrido objetivo desde cero es:
 
-La integración con un ComfyUI existente es una etapa técnica y una opción avanzada. La incorporación normal del producto para principiantes debe gestionar su propio entorno, motor y componentes; no delegar esa instalación en tutoriales o terminal. Preferir pocos perfiles completamente comprobados a muchos archivos que la persona tenga que hacer funcionar.
+1. Detectar recursos reales y proponer un **modelo de imágenes**, sus componentes y ajustes viables.
+2. Buscar ComfyUI en ubicaciones acotadas y comprobar si una instalación existente puede reutilizarse.
+3. Si falta una instalación utilizable, ofrecer un entorno propio, aislado y versionado.
+4. Mostrar descarga, espacio, ubicación, licencias y cambios; autorizar el conjunto una vez.
+5. Ejecutar preparación y verificación con progreso real y recuperación. Crear es una acción posterior.
 
-## Objetivo y prioridades
+No exigir conocimientos de Python, CUDA, nodos, puertos o rutas de pesos. Los detalles avanzados permanecen accesibles. Reutilizar la instalación de ComfyUI de D en esta PC; la ruta sin motor se prueba en el laboratorio Linux separado. La instalación administrada está implementada en desarrollo; [receta y validación](docs/managed-setup.md).
 
-Crear una aplicación accesible para descubrir, descargar y utilizar modelos de pesos abiertos de imagen, video y audio. Detectar el hardware y recomendar combinaciones de modelo, variante, receta y ajustes que sean viables y prácticas. Imagen primero.
+«Modelo» se refiere aquí al generador de imágenes. No se requiere un LLM adicional para recomendarlo ni para modificar las descripciones. Recomendaciones mediante reglas y evidencia local; no filtrar la intención creativa por categorías arbitrarias.
 
-Reducir desarrollo duplicado compartiendo la interfaz web y la de escritorio, y también la lógica que administra hardware, archivos, instalaciones y generaciones. El cálculo de IA seguirá dependiendo del motor, sus optimizaciones y el hardware; el cambio de tecnología de interfaz no garantiza generaciones más rápidas.
+## Stack y fronteras
 
-## Decisiones de plataforma
+Vue 3 + TypeScript + Vite para una UI compartida; Electron para escritorio; Bun + Fastify como servicio local independiente; SQLite mediante `bun:sqlite`. Un único `bun.lock` para el producto. Electron conserva su Node interno; el servicio se compila con Bun y se ejecuta fuera de ASAR mediante `spawn` y `shell:false`.
 
-- Vue 3 + TypeScript + Vite para la UI común, con SFC y Composition API. Usar componentes reales, no una captura como fondo de interfaz.
-- Electron como contenedor de escritorio: ventanas, ciclo de vida e integración mínima con el SO.
-- Bun + TypeScript + Fastify como servicio local, ejecutable sin Electron y también como proceso separado administrado por Electron.
-- El servicio Bun se distribuye como ejecutable auxiliar que Electron inicia con spawn; Electron conserva su Node interno. Ninguna API Bun en main/preload o componentes Vue. El usuario final no instala runtimes por separado.
-- Mantener Fastify y verificar sus plugins/red/streaming bajo Bun antes de ampliar funciones; no sustituir el framework por cambiar el runtime.
-- API local HTTP y eventos SSE; la UI no accede directamente a ComfyUI, SQLite, procesos o archivos internos del motor.
-- SQLite mediante bun:sqlite como autoridad de datos del servicio; archivos grandes fuera de la base.
-- Bun workspaces y versiones estables compatibles fijadas con bun.lock. No introducir microservicios, Docker, Kubernetes o un segundo backend.
-- Windows y Linux son las primeras plataformas de validación. macOS es un objetivo de portabilidad, empaquetado y pruebas pendientes, no una plataforma ya certificada.
-- La generación es local. Sin servicios cloud propios, cuentas Veltria, sincronización, telemetría o conectores de inferencia remota en esta etapa.
-- Web usa el servicio del equipo principal. Inicialmente navegador local; requisito LAN aceptado para dispositivos emparejados de la misma red, sin Internet si el perfil está preparado. El host ejecuta y conserva datos; el cliente sólo presenta controles y resultados. Activación explícita y alcance según LOCAL-NETWORK.md; sin sitio público o túneles.
-- El diseño contempla un ejecutor remoto futuro mediante la frontera del adaptador, sin implementarlo ahora.
-- Trabajar sin subagentes. Conservar trabajo y datos existentes.
+Toda la inferencia es local mediante ComfyUI. No añadir otro backend, Docker como requisito de producto, cuentas, telemetría o inferencia en la nube. El navegador consulta el hardware del servicio, no atribuye su GPU al dispositivo cliente. Windows y Linux primero; WSL y Linux nativo se distinguen. macOS no está certificado.
 
-## Experiencia visual
+## Modelos y datos
 
-Seguir DESIGN.md, UI-PREVIEW.md y el prototipo ui-prototype/veltria.html para el nuevo flujo; design/obsidian-dark.png / obsidian-light.png conservan el estilo de referencia. Grafito/ámbar en oscuro, marfil y ámbar/cobre en claro. Misma estructura en ambas variantes, estados legibles, foco de teclado y efectos discretos. Temas desde el primer hito. La interfaz web debe adaptarse también a teléfono/tableta siguiendo MOBILE-UI.md, con la misma lógica y controles accesibles; esto no añade un ejecutor móvil ni acceso LAN automático.
+Distinguir modelo, archivo/variante, receta y configuración. El catálogo admite tres modelos incluidos y descubrimiento acotado de checkpoints/finetunes y LoRA SD 1.5, más el SDXL oficial fijado. Descargar no equivale a preparar ni a comprobar ejecución. No prometer soporte de cualquier safetensors o workflow.
 
-Navegación: Crear, Modelos, Biblioteca, Mi equipo y Ajustes. Prompts y ajustes sencillos al frente; controles avanzados desplegables. UI preparada para localización; no incrustar textos de usuario en lógica. Inglés como idioma visual inicial de las referencias.
+Usar fuentes/revisiones fijadas, comprobación de espacio y SHA-256. No ejecutar instrucciones de metadatos ni instalar nodos arbitrarios. Mantener modelos y resultados fuera del paquete, preservar parciales y componentes compartidos. Las configuraciones y ajustes reales de cada trabajo se conservan en SQLite.
 
-## Modelos y compatibilidad
+Equipo de referencia comprobado: Ryzen 5 7535HS, RTX 4050 Laptop de 6 GB y 16 GB nominales de RAM. No convertirlo en una constante de producto ni extrapolar sus resultados a otros equipos. Cada recomendación explica recursos, incertidumbre y alcance de la evidencia.
 
-Distinguir modelo, variante de pesos, receta ejecutable y perfil de ajustes. Un modelo descargado no está listo hasta reunir componentes y requisitos de la receta.
+## Experiencia y alcance
 
-Detectar CPU, RAM, GPU, VRAM, controlador y disco con fuente de datos y valores desconocidos cuando corresponda. Distinguir total y disponible, entornos WSL y Windows, y hardware del servicio frente al del navegador. No sumar RAM y VRAM ni varias GPU como memoria intercambiable.
+Crear, Modelos, Biblioteca, Mi equipo y Ajustes; español/inglés; temas sistema/claro/oscuro; controles avanzados desplegables. Mantener Obsidian y la adaptación móvil. Mostrar sólo estados respaldados por el servicio. [PHILOSOPHY.md](PHILOSOPHY.md) define la aceptación de la experiencia.
 
-Equipo del usuario como referencia de prueba, no constante de producto: RTX 4050 de 6 GB VRAM, 16 GB RAM y Ryzen 5 7535H. Confirmarlo al ejecutar.
+El hito 3 tiene instalación administrada y bienvenida principal implementadas; su aceptación por plataformas y usabilidad sigue pendiente. El siguiente incremento funcional propuesto es la recuperación guiada del hito 4; [comparación y criterios](docs/milestone-4.md). No ampliar familias ni presentar video como fiable para cerrar esos pendientes. LAN sigue pendiente según [LOCAL-NETWORK.md](LOCAL-NETWORK.md). Audio, entrenamiento, workflows arbitrarios, nube y actualizaciones automáticas no están implementados.
 
-Recomendaciones locales mediante reglas y mediciones; no requieren un LLM. Estados: recomendado, con ajustes, experimental, no compatible y sin verificar. Explicar motivos y separar requisitos documentados, pruebas similares y ejecución verificada. No inventar tiempos ni porcentajes. Registrar la vigencia de mediciones según modelo, ajustes y entorno.
+## Trabajo y validación
 
-## Motores y descargas
+Trabajar sin subagentes y conservar cambios, datos y motores existentes. Mantener `development`; no publicar ni fusionar a `main` como efecto de un build. No descargar pesos ni instalar componentes sin que estén incluidos en una autorización concreta.
 
-ComfyUI local es el primer motor. Empezar conectando una instalación existente sin mover archivos o cambiar su entorno. Instalar y administrar una instancia propia en el hito 3 como ruta normal para principiantes; la conexión externa no sustituye este requisito de producto. No exigir otros gestores como intermediarios.
-
-La preparación inicial puede localizar y reutilizar una instalación existente sin pedir rutas de Python. La búsqueda sólo lee ubicaciones acotadas; muestra propuesta, recursos, descarga, licencia y cambios antes de autorizar. Distinguir archivos localizados, arranque comprobado y generación verificada. El selector nativo de carpetas es una integración mínima de Electron; las reglas y búsquedas permanecen en el servicio compartido.
-
-Cada receta declara workflow API, componentes, versiones, entradas y extensiones necesarias. La preparación la resuelve el servicio como una operación persistida: plan previo, autorización del conjunto, ejecución, comprobación y recuperación. Un archivo descargado no equivale a una tarea preparada o verificada. Los LoRA requieren relación con familia/modelo/receta y estado de compatibilidad; no son archivos intercambiables por estar en la misma carpeta. No prometer compatibilidad con cualquier workflow ni conversión universal entre motores. Cancelar sólo trabajo propio, especialmente con motores compartidos.
-
-Catálogo inicial pequeño y revisado, incluido para consulta offline. Descarga de componentes por streaming a archivos temporales, reanudación cuando el origen la admita, verificación de integridad y espacio total/temporal antes de instalar. Credenciales de proveedores fuera de logs y repositorio. Respetar licencias y pasos de acceso del proveedor. No ejecutar instrucciones arbitrarias de metadatos o workflows.
-
-## Calidad y distribución
-
-Validar navegador y Electron sobre el mismo servicio, sin duplicar reglas. Pruebas con mocks no equivalen a detección o generación real. Una build para un sistema no equivale a haber ejecutado el producto en él.
-
-Conservar resultados y modelos fuera de carpetas eliminables de motores. Documentar comandos, versiones y validaciones disponibles. No activar actualizaciones automáticas o publicar instaladores durante este traspaso.
-
-Consultar PHILOSOPHY.md para principios y aceptación de UX, ARCHITECTURE.md para procesos, contratos y fases; MIGRATION.md si ya existe código previo. Mantener este archivo como la síntesis vigente.
+Verificar comportamientos bajo sus runtimes reales y en paquetes. Una fixture no es inferencia; una compilación cruzada no certifica la plataforma; WSL no es Linux nativo. Registrar pruebas y límites en [docs/validation.md](docs/validation.md). La tarea pendiente se define en [FIRST-TASK.md](FIRST-TASK.md).

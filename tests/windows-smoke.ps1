@@ -5,6 +5,9 @@ $ErrorActionPreference = 'Stop'
 $exe = Join-Path $Root 'build\service\veltria-service.exe'
 $ui = Join-Path $Root 'apps\ui\dist'
 $data = Join-Path ([IO.Path]::GetTempPath()) ('Veltria native Windows with spaces ' + [guid]::NewGuid())
+$nativeTestTempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\') + '\'
+$data = [IO.Path]::GetFullPath($data)
+if (-not $data.StartsWith($nativeTestTempRoot, [StringComparison]::OrdinalIgnoreCase) -or (Split-Path $data -Leaf) -notmatch '^Veltria native Windows with spaces [a-f0-9-]{36}$') { throw 'Unexpected native test cleanup target' }
 $null = New-Item -ItemType Directory -Path $data
 $p = $null
 $control = -join (1..64 | ForEach-Object { '0123456789abcdef'[(Get-Random -Maximum 16)] })
@@ -24,7 +27,7 @@ function Start-Veltria {
   if (-not $read.Wait(15000)) { throw 'Timeout de arranque Windows' }
   if (-not $read.Result) { throw ('No hubo respuesta: ' + $p.StandardError.ReadToEnd()) }
   $script:ready = $read.Result | ConvertFrom-Json
-  if ($ready.name -ne 'veltria' -or $ready.protocol -ne 6 -or $ready.origin -notmatch '^http://127\.0\.0\.1:\d+$') { throw 'Identidad incorrecta' }
+  if ($ready.name -ne 'veltria' -or $ready.protocol -ne 9 -or $ready.origin -notmatch '^http://127\.0\.0\.1:\d+$') { throw 'Identidad incorrecta' }
   $script:origin = $ready.origin
   $response = Invoke-WebRequest -UseBasicParsing -Uri "$origin/api/v1/session" -Method POST -ContentType 'application/json' -Headers @{Origin=$origin} -Body (@{nonce=$ready.nonce} | ConvertTo-Json) -SessionVariable localSession
   $script:session = $localSession
@@ -58,7 +61,7 @@ try {
   $health = Get-Api 'health'
   if (-not $health.capabilities.generation -or $health.runtime -notmatch '^Bun ') { throw 'Capacidades/runtime incorrectos' }
   $catalog = Get-Api 'catalog'
-  if ($catalog.models.Count -ne 2 -or $catalog.configurations.Count -ne 6) { throw 'Catalogo incompleto' }
+  if ($catalog.models.Count -ne 3 -or $catalog.configurations.Count -ne 9) { throw 'Catalogo incompleto' }
   $configResponse = Invoke-WebRequest -UseBasicParsing -Uri "$origin/api/v1/catalog/configurations/$($catalog.selectedConfigurationId)" -WebSession $session
   if ($configResponse.Headers['Content-Disposition'] -notmatch 'attachment') { throw 'Configuracion sin descarga JSON' }
   $configuration = $configResponse.Content | ConvertFrom-Json

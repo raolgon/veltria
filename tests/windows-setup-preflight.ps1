@@ -6,7 +6,7 @@ $data = Join-Path $env:LOCALAPPDATA ('Veltria\setup-validation-' + (Get-Date -Fo
 $launcher = $null; $descriptor = $null
 try {
   $info = New-Object Diagnostics.ProcessStartInfo
-  $info.FileName = Join-Path $Root 'build\browser\0.5.0\veltria-web.exe'
+  $info.FileName = Join-Path $Root ('build\browser\'+(Get-Content -Raw (Join-Path $Root 'package.json') | ConvertFrom-Json).version+'\veltria-web.exe')
   $info.UseShellExecute = $false; $info.RedirectStandardOutput = $true; $info.RedirectStandardError = $true
   $info.EnvironmentVariables['VELTRIA_DATA_DIR'] = $data
   $launcher = [Diagnostics.Process]::Start($info)

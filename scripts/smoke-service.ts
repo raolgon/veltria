@@ -59,7 +59,7 @@ try {
       assert.equal((await res('/setup/scan', { method: 'POST', headers, body: JSON.stringify({ directory: 'relative/path' }) })).status, 400); checks++
       assert.equal((await res('/setup/prepare', { method: 'POST', headers, body: JSON.stringify({ revision: 'a'.repeat(64), acceptLicense: true, acceptReuse: false }) })).status, 400); checks++
       const catalog = catalogSchema.parse(await (await res('/catalog', { headers })).json())
-      assert.equal(catalog.models.length, 2); assert.equal(catalog.configurations.length, 6); checks++
+      assert.equal(catalog.models.length, 3); assert.equal(catalog.configurations.length, 9); checks++
       const exportedConfiguration = await res(`/catalog/configurations/${catalog.selectedConfigurationId}`, { headers })
       assert.match(exportedConfiguration.headers.get('content-disposition')!, /attachment/); assert.equal((await exportedConfiguration.json() as any).kind, 'veltria-image-configuration'); checks++
       const video = videoStateSchema.parse(await (await res('/video', { headers })).json())

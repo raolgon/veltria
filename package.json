@@ -1,6 +1,6 @@
 {
   "name": "veltria",
-  "version": "0.5.1",
+  "version": "0.10.0",
   "private": true,
   "type": "module",
   "packageManager": "bun@1.4.4",
@@ -18,7 +18,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json && vue-tsc --noEmit -p apps/ui/tsconfig.json",
     "start:web": "bun scripts/web.ts",
     "start:desktop": "node scripts/desktop.mjs",
-    "test": "vitest run && bun test ./tests/service.bun.ts ./tests/creation.bun.ts ./tests/video.bun.ts ./tests/setup.bun.ts && bun scripts/smoke-service.ts",
+    "test": "vitest run && bun test ./tests/service.bun.ts ./tests/creation.bun.ts ./tests/video.bun.ts ./tests/setup.bun.ts ./tests/managed.bun.ts && bun scripts/smoke-service.ts",
     "test:ui": "playwright test",
     "package:linux": "bun run build && electron-builder --linux AppImage --publish never",
     "package:win": "bun scripts/build.ts --target=bun-windows-x64-baseline && electron-builder --win nsis --x64 --publish never",
@@ -50,7 +50,7 @@
     "asar": true,
     "directories": {
       "app": "apps/desktop",
-      "output": "release/0.5.1"
+      "output": "release/0.10.0"
     },
     "files": [
       "dist/**",

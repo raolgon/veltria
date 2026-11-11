@@ -44,7 +44,7 @@ export async function engineJson(origin: string, path: string, body?: unknown, s
 export interface ImageEngine {
   readonly origin: string | null
   readonly version: string | null
-  start(binding: NonNullable<Settings['engineBinding']>, modelsDirectory: string, checkpoint: string, signal: AbortSignal): Promise<void>
+  start(binding: NonNullable<Settings['engineBinding']>, modelsDirectory: string, checkpoint: string, signal: AbortSignal, memoryMode?: 'lowvram'): Promise<void>
   stop(): Promise<void>
 }
 type EngineOptions = { folder?: string; requiredNodes?: readonly string[]; validateNodes?: (nodes: any) => void }
@@ -54,20 +54,20 @@ export class LocalImageEngine implements ImageEngine {
   private child: ChildProcess | null = null
   private starting: Promise<void> | null = null
   constructor(private dataDir: string, private options: EngineOptions = {}) {}
-  async start(binding: NonNullable<Settings['engineBinding']>, modelsDirectory: string, checkpoint: string, signal: AbortSignal) {
+  async start(binding: NonNullable<Settings['engineBinding']>, modelsDirectory: string, checkpoint: string, signal: AbortSignal, memoryMode?: 'lowvram') {
     if (this.origin) {
       try { await engineJson(this.origin, '/system_stats', undefined, signal); return } catch { await this.stop() }
     }
     if (this.starting) return this.starting
-    this.starting = this.launch(binding, modelsDirectory, checkpoint, signal).finally(() => { this.starting = null })
+    this.starting = this.launch(binding, modelsDirectory, checkpoint, signal, memoryMode).finally(() => { this.starting = null })
     return this.starting
   }
-  private async launch(value: NonNullable<Settings['engineBinding']>, modelsDirectory: string, checkpoint: string, signal: AbortSignal) {
+  private async launch(value: NonNullable<Settings['engineBinding']>, modelsDirectory: string, checkpoint: string, signal: AbortSignal, memoryMode?: 'lowvram') {
     const binding = await validateEngineBinding(value)
     const runtime = join(this.dataDir, this.options.folder || 'image-engine')
     for (const folder of ['user', 'input', 'output', 'temp']) await mkdir(join(runtime, folder), { recursive: true, mode: 0o700 })
     const config = join(runtime, 'model-paths.yaml')
-    await writeFile(config, `veltria:\n  base_path: ${JSON.stringify(modelsDirectory)}\n  checkpoints: checkpoints\n`, { mode: 0o600 })
+    await writeFile(config, `veltria:\n  base_path: ${JSON.stringify(modelsDirectory)}\n  checkpoints: checkpoints\n  loras: loras\n`, { mode: 0o600 })
     // Own wrapper only: never patch ComfyUI. Exit the exact interpreter if its Bun owner crashes.
     const bootstrap = join(runtime, 'bootstrap.py')
     await writeFile(bootstrap, `import os, sys, threading, time, runpy\nowner = int(sys.argv[1])\nentry = sys.argv[2]\nsys.argv = sys.argv[2:]\nsys.path.insert(0, os.path.dirname(entry))\ndef watch_owner():\n    if os.name == 'nt':\n        import ctypes\n        kernel = ctypes.WinDLL('kernel32', use_last_error=True)\n        kernel.OpenProcess.argtypes = [ctypes.c_uint32, ctypes.c_int, ctypes.c_uint32]\n        kernel.OpenProcess.restype = ctypes.c_void_p\n        kernel.WaitForSingleObject.argtypes = [ctypes.c_void_p, ctypes.c_uint32]\n        kernel.CloseHandle.argtypes = [ctypes.c_void_p]\n        handle = kernel.OpenProcess(0x00100000, 0, owner)\n        if not handle:\n            os._exit(0)\n        kernel.WaitForSingleObject(handle, 0xffffffff)\n        kernel.CloseHandle(handle)\n        os._exit(0)\n    else:\n        while True:\n            if os.getppid() != owner:\n                os._exit(0)\n            time.sleep(1)\nthreading.Thread(target=watch_owner, daemon=True).start()\nrunpy.run_path(entry, run_name='__main__')\n`, { mode: 0o600 })
@@ -79,7 +79,7 @@ export class LocalImageEngine implements ImageEngine {
       if (home && isAbsolute(home)) env.PATH = [home, join(home, 'Library', 'bin'), join(home, 'DLLs'), dirname(binding.python), process.env.PATH].filter(Boolean).join(';')
     }
     const port = await freePort(), origin = `http://127.0.0.1:${port}`
-    const child = spawn(binding.python, ['-B', bootstrap, String(process.pid), join(binding.directory, 'main.py'), '--listen', '127.0.0.1', '--port', String(port), '--disable-auto-launch', '--disable-all-custom-nodes', '--extra-model-paths-config', config, '--user-directory', join(runtime, 'user'), '--input-directory', join(runtime, 'input'), '--output-directory', join(runtime, 'output'), '--temp-directory', join(runtime, 'temp'), '--database-url', 'sqlite:///:memory:'], { cwd: binding.directory, env, shell: false, windowsHide: true, detached: process.platform !== 'win32', stdio: ['ignore', 'pipe', 'pipe'] })
+    const child = spawn(binding.python, ['-B', bootstrap, String(process.pid), join(binding.directory, 'main.py'), '--listen', '127.0.0.1', '--port', String(port), '--disable-auto-launch', ...(memoryMode==='lowvram'?['--lowvram']:[]), '--disable-all-custom-nodes', '--extra-model-paths-config', config, '--user-directory', join(runtime, 'user'), '--input-directory', join(runtime, 'input'), '--output-directory', join(runtime, 'output'), '--temp-directory', join(runtime, 'temp'), '--database-url', 'sqlite:///:memory:'], { cwd: binding.directory, env, shell: false, windowsHide: true, detached: process.platform !== 'win32', stdio: ['ignore', 'pipe', 'pipe'] })
     this.child = child
     const log = createWriteStream(join(runtime, 'engine.log'), { flags: 'a', mode: 0o600 })
     child.stdout?.on('data', data => log.write(data)); child.stderr?.on('data', data => log.write(data))

@@ -9,12 +9,12 @@ const waitFor = async <T>(work: () => Promise<T>, predicate: (value: T) => boole
   do { const value = await work(); if (predicate(value)) return value; await Bun.sleep(25) } while (Date.now() < deadline)
   throw new Error('Estado esperado no alcanzado')
 }
-async function setup(multiple = false) {
+async function setup(multiple = false, adaptation = false, xl = false) {
   const root = await mkdtemp(join(tmpdir(), 'Veltria image contract with spaces ')), ui = join(root, 'UI')
   await mkdir(ui); await writeFile(join(ui, 'index.html'), '<title>fixture</title>')
   const fixture = new CreationFixture(), binding = await fixture.binding(root)
   const create = async () => {
-    const server = await createServer({ dataDir: root, uiDir: ui, instanceId: crypto.randomUUID(), controlToken: 'a'.repeat(64), creation: { profile: fixture.profile, ...(multiple ? { profiles: [fixture.profile, { ...fixture.profile, id: 'fixture-second', title: 'Segundo modelo de prueba', filename: 'fixture-second.safetensors', revision: 'second-v1' }] } : {}), hardware: async () => fixtureHardware, disk: async () => fixture.availableBytes, engine: fixture.engine, allowLocalFixture: true } })
+    const server = await createServer({ dataDir: root, uiDir: ui, instanceId: crypto.randomUUID(), controlToken: 'a'.repeat(64), creation: { profile: fixture.profile, ...(multiple ? { profiles: [fixture.profile, { ...fixture.profile, id: 'fixture-second', title: 'Segundo modelo de prueba', filename: 'fixture-second.safetensors', revision: 'second-v1' }, ...(xl ? [{...fixture.profile,id:'fixture-xl',filename:'fixture-xl.safetensors',family:'sdxl' as const,width:768,height:768}] : []), ...(adaptation ? [{ ...fixture.profile, id: 'fixture-lora', filename: 'fixture-lora.safetensors', adaptation: { base: fixture.profile.id, strength: 0.7 } }] : [])] } : {}), hardware: async () => fixtureHardware, disk: async () => fixture.availableBytes, engine: fixture.engine, allowLocalFixture: true } })
     const origin = await server.listen()
     const bootstrap = await fetch(`${origin}/api/v1/session`, { method: 'POST', headers: { origin, 'content-type': 'application/json' }, body: JSON.stringify({ nonce: server.issueNonce() }) })
     const session: any = await bootstrap.json(), cookie = bootstrap.headers.get('set-cookie')!.split(';')[0]
@@ -105,10 +105,44 @@ test('cancelación por identificador y fallo del motor conservan descripción y 
     expect((await ctx.json(`/jobs/${job.id}`)).status).toBe('cancelled')
     await waitFor(() => ctx.json('/activity'), state => state.jobs === 0)
     ctx.fixture.complete = true; ctx.fixture.failure = true
-    const failed: any = await (await ctx.call('/jobs', 'POST', { requestId: crypto.randomUUID(), prompt: 'Another preserved description' })).json()
-    await waitFor(() => ctx.json(`/jobs/${failed.id}`), state => state.status === 'failed')
-    expect((await ctx.json(`/jobs/${failed.id}`)).prompt).toBe('Another preserved description')
+    ctx.fixture.failureDetails = { exception_type: 'torch.cuda.OutOfMemoryError', exception_message: 'CUDA out of memory. Tried to allocate 1024.00 MiB', node_type: 'KSampler' }
+    const oomQuality = { width: 768, height: 768, steps: 30, cfg: 6.5 }
+    const failed: any = await (await ctx.call('/jobs', 'POST', { requestId: crypto.randomUUID(), prompt: 'Another preserved description', format: 'square', quality: oomQuality })).json()
+    const failedState = await waitFor(() => ctx.json(`/jobs/${failed.id}`), state => state.status === 'failed')
+    expect(failedState).toMatchObject({ prompt: 'Another preserved description', format: 'square', width: 768, height: 768, steps: 30, cfg: 6.5, requestedQuality: oomQuality })
+    expect(typeof failedState.seed).toBe('number')
+    expect(failedState.failure).toMatchObject({ kind: 'memory', node: 'KSampler' })
+    expect(failedState.failure.detail).toContain('CUDA out of memory')
+    expect(failedState.message).toContain('memoria disponible')
+
+    ctx.fixture.failureDetails = { exception_type: 'RuntimeError', exception_message: 'size mismatch for model.diffusion_model.input_blocks', node_type: 'CheckpointLoaderSimple' }
+    const incompatible: any = await (await ctx.call('/jobs', 'POST', { requestId: crypto.randomUUID(), prompt: 'Incompatible checkpoint test' })).json()
+    const incompatibleState = await waitFor(() => ctx.json(`/jobs/${incompatible.id}`), state => state.status === 'failed')
+    expect(incompatibleState.failure).toMatchObject({ kind: 'incompatible', node: 'CheckpointLoaderSimple' })
+    expect(incompatibleState.message).not.toContain('memoria disponible')
+
+    ctx.fixture.failureDetails = { exception_type: 'ValueError', exception_message: 'NaN encountered during step', node_type: 'VAEDecode' }
+    const executionErr: any = await (await ctx.call('/jobs', 'POST', { requestId: crypto.randomUUID(), prompt: 'Internal execution error test' })).json()
+    const executionState = await waitFor(() => ctx.json(`/jobs/${executionErr.id}`), state => state.status === 'failed')
+    expect(executionState.failure).toMatchObject({ kind: 'execution', node: 'VAEDecode' })
+    expect(executionState.message).not.toContain('memoria disponible')
+
     const count = ctx.fixture.submissions.length; await Bun.sleep(200); expect(ctx.fixture.submissions).toHaveLength(count)
+    await ctx.server.close()
+    const reopened = await ctx.create()
+    try {
+      await Bun.sleep(150)
+      expect(ctx.fixture.submissions).toHaveLength(count)
+      const persistedOom = await reopened.json(`/jobs/${failed.id}`)
+      expect(persistedOom).toMatchObject({ id: failed.id, status: 'failed', prompt: 'Another preserved description', seed: failedState.seed, width: 768, height: 768, steps: 30, cfg: 6.5, requestedQuality: oomQuality, failure: { kind: 'memory', node: 'KSampler' } })
+      ctx.fixture.failure = false; ctx.fixture.failureDetails = null
+      const retry: any = await (await reopened.call('/jobs', 'POST', { requestId: crypto.randomUUID(), prompt: persistedOom.prompt, format: persistedOom.format })).json()
+      expect(retry.id).not.toBe(failed.id)
+      const recovered = await waitFor(() => reopened.json(`/jobs/${retry.id}`), state => state.status === 'completed')
+      expect(recovered.width).toBe(512); expect(recovered.steps).toBe(20)
+      expect((await reopened.json(`/jobs/${failed.id}`)).width).toBe(768)
+      expect((await reopened.json(`/jobs/${failed.id}`)).seed).toBe(failedState.seed)
+    } finally { await reopened.server.close() }
   } finally { await ctx.cleanup() }
 })
 
@@ -142,7 +176,7 @@ test('origen sin Range: continuar reinicia de forma segura sin duplicar bytes', 
   } finally { await ctx.cleanup() }
 })
 
-test('reinicio tras enviar: conserva el trabajo sin reenviar y recupera su resultado', async () => {
+test('reinicio tras enviar: conserva el trabajo sin reenviar y recupera su resultado o fallo real', async () => {
   const ctx = await setup(); ctx.fixture.complete = false; ctx.fixture.downloadDelay = 1
   try {
     await ctx.call('/settings', 'PATCH', { engineBinding: ctx.binding })
@@ -161,7 +195,25 @@ test('reinicio tras enviar: conserva el trabajo sin reenviar y recupera su resul
       expect((await recovery.json() as any).status).toBe('completed')
       expect(ctx.fixture.submissions).toHaveLength(count)
       expect((await reopened.json(`/jobs/${job.id}`)).prompt).toBe('Keep my interrupted input')
+
+      // Now test an interrupted job whose engine execution ended in an OOM error
+      ctx.fixture.complete = false
+      const job2: any = await (await reopened.call('/jobs', 'POST', { requestId: crypto.randomUUID(), prompt: 'Interrupted OOM job' })).json()
+      await waitFor(() => reopened.json(`/jobs/${job2.id}`), state => state.status === 'running')
     } finally { await reopened.server.close() }
+    const reopenedAgain = await ctx.create()
+    try {
+      const jobsList = (await reopenedAgain.json('/jobs')).jobs
+      const interruptedOom = jobsList.find((item: any) => item.prompt === 'Interrupted OOM job')
+      expect(interruptedOom.status).toBe('interrupted')
+      ctx.fixture.complete = true; ctx.fixture.failure = true
+      ctx.fixture.failureDetails = { exception_type: 'torch.cuda.OutOfMemoryError', exception_message: 'CUDA out of memory', node_type: 'VAEDecode' }
+      const reconciledFail = await reopenedAgain.call(`/jobs/${interruptedOom.id}/reconcile`, 'POST', {})
+      expect(reconciledFail.status).toBe(200)
+      const body: any = await reconciledFail.json()
+      expect(body.status).toBe('failed')
+      expect(body.failure).toMatchObject({ kind: 'memory', node: 'VAEDecode' })
+    } finally { await reopenedAgain.server.close() }
   } finally { await ctx.cleanup() }
 })
 
@@ -256,3 +308,103 @@ test('catálogo: descarga por modelo, configura sin redescargar, importa/exporta
     } finally { await reopened.server.close() }
   } finally { await ctx.cleanup() }
 }, 25000)
+
+test('LoRA: un plan prepara base y adaptación, reusa archivos y envía el conjunto al motor', async () => {
+  const ctx = await setup(true, true)
+  try {
+    await ctx.call('/settings', 'PATCH', { engineBinding: ctx.binding })
+    await ctx.call('/catalog/select', 'POST', { configurationId: 'fixture-lora-balanced' })
+    const plan = await ctx.json('/creation/plan')
+    expect(plan.totalBytes).toBe(ctx.fixture.bytes.length * 2)
+    expect(plan.remainingBytes).toBe(plan.totalBytes)
+    await ctx.call('/creation/prepare', 'POST', {revision: plan.revision, acceptLicense: true})
+    await waitFor(() => ctx.json('/creation'), state => state.canCreate)
+    expect((await ctx.json('/creation/plan')).remainingBytes).toBe(0)
+    const response = await ctx.call('/jobs', 'POST', {requestId: crypto.randomUUID(), prompt: 'fixture adaptation', format: 'square'})
+    const job: any = await response.json()
+    const done = await waitFor(() => ctx.json('/jobs/' + job.id), value => ['completed', 'failed'].includes(value.status))
+    expect(done.status).toBe('completed')
+    const graph = ctx.fixture.submissions.at(-1).prompt
+    expect(graph['1'].inputs.ckpt_name).toBe(ctx.fixture.profile.filename)
+    expect(graph['8'].inputs.lora_name).toBe('fixture-lora.safetensors')
+    expect(graph['5'].inputs.model).toEqual(['8', 0])
+  } finally { await ctx.cleanup() }
+})
+
+test('gestión: retirar LoRA conserva base y biblioteca; retirar base compartida exige confirmación',async()=>{
+ const ctx=await setup(true,true)
+ try{
+  await ctx.call('/settings','PATCH',{engineBinding:ctx.binding})
+  await ctx.call('/catalog/select','POST',{configurationId:'fixture-lora-balanced'})
+  const prepare=await ctx.json('/creation/plan');await ctx.call('/creation/prepare','POST',{revision:prepare.revision,acceptLicense:true})
+  await waitFor(()=>ctx.json('/creation'),state=>state.canCreate)
+  const created:any=await(await ctx.call('/jobs','POST',{requestId:crypto.randomUUID(),prompt:'storage fixture',format:'square'})).json()
+  await waitFor(()=>ctx.json('/jobs/'+created.id),job=>job.status==='completed')
+  const completed=await ctx.json('/jobs/'+created.id)
+  const inventory=await ctx.json('/catalog/storage');expect(inventory.files).toHaveLength(2)
+  ctx.server.repository.db.query('UPDATE image_jobs SET data=? WHERE id=?').run(JSON.stringify({...completed,status:'interrupted'}),created.id)
+  expect((await ctx.call('/catalog/storage/plan','POST',{id:inventory.files[0].id})).status).toBe(409)
+  ctx.server.repository.db.query('UPDATE image_jobs SET data=? WHERE id=?').run(JSON.stringify(completed),created.id)
+  const base=inventory.files.find((item:any)=>item.kind==='checkpoint'),lora=inventory.files.find((item:any)=>item.kind==='lora')
+  const basePlan:any=await(await ctx.call('/catalog/storage/plan','POST',{id:base.id})).json()
+  expect((await ctx.call('/catalog/storage/remove','POST',{id:base.id,revision:basePlan.revision})).status).toBe(409)
+  const loraPlan:any=await(await ctx.call('/catalog/storage/plan','POST',{id:lora.id})).json()
+  expect((await ctx.call('/catalog/storage/remove','POST',{id:lora.id,revision:loraPlan.revision})).status).toBe(200)
+  const remaining=await ctx.json('/catalog/storage');expect(remaining.files).toHaveLength(1);expect(remaining.files[0].id).toBe(base.id)
+  expect((await ctx.json('/creation')).canCreate).toBe(false)
+  expect((await ctx.json('/jobs/'+created.id)).status).toBe('completed')
+  const finalPlan:any=await(await ctx.call('/catalog/storage/plan','POST',{id:base.id})).json()
+  expect((await ctx.call('/catalog/storage/remove','POST',{id:base.id,revision:finalPlan.revision,acceptShared:true})).status).toBe(200)
+  expect((await ctx.json('/catalog/storage')).files).toHaveLength(0)
+ }finally{await ctx.cleanup()}
+})
+
+test('SDXL: receta propia, memoria reducida, dimensiones reales y rechazo de recetas cruzadas',async()=>{
+ const ctx=await setup(true,false,true)
+ try{
+  await ctx.call('/settings','PATCH',{engineBinding:ctx.binding})
+  const catalog=await ctx.json('/catalog'), configuration=catalog.configurations.find((item:any)=>item.id==='fixture-xl-balanced').configuration
+  expect(configuration.recipe).toBe('sdxl-text-to-image-v1')
+  expect((await ctx.call('/catalog/adopt','POST',{repository:'fixture/test',file:'style.safetensors',baseModelId:'fixture-xl'})).status).toBe(409)
+  expect((await ctx.call('/catalog/configurations','POST',{...configuration,modelId:ctx.fixture.profile.id})).status).toBe(400)
+  expect((await ctx.call('/catalog/configurations','POST',{...configuration,recipe:'sd15-text-to-image-v1'})).status).toBe(400)
+  await ctx.call('/catalog/select','POST',{configurationId:'fixture-xl-balanced'})
+  const plan=await ctx.json('/creation/plan');expect(plan.canPrepare).toBe(true)
+  await ctx.call('/creation/prepare','POST',{revision:plan.revision,acceptLicense:true})
+  await waitFor(()=>ctx.json('/creation'),state=>state.canCreate)
+  expect(ctx.fixture.memoryModes.at(-1)).toBe('lowvram')
+  const job:any=await(await ctx.call('/jobs','POST',{requestId:crypto.randomUUID(),prompt:'SDXL fixture',format:'landscape'})).json()
+  expect(job.width).toBe(768);expect(job.height).toBe(576)
+  await waitFor(()=>ctx.json('/jobs/'+job.id),value=>value.status==='completed')
+  expect(ctx.fixture.submissions.at(-1).prompt['4'].inputs.width).toBe(768)
+ }finally{await ctx.cleanup()}
+})
+
+test('calidad por imagen: límites por familia, envío real, idempotencia y persistencia sin cambiar la configuración', async () => {
+ const ctx = await setup(true, false, true)
+ try {
+  await ctx.call('/settings', 'PATCH', { engineBinding: ctx.binding })
+  const plan = await ctx.json('/creation/plan')
+  await ctx.call('/creation/prepare', 'POST', { revision: plan.revision, acceptLicense: true })
+  await waitFor(() => ctx.json('/creation'), state => state.canCreate)
+  const before = await ctx.json('/creation')
+  const input = { requestId: crypto.randomUUID(), prompt: 'custom quality fixture', format: 'landscape', quality: { width: 768, height: 512, steps: 30, cfg: 6.5 } }
+  for (const quality of [{ ...input.quality, width: 1280 }, { ...input.quality, height: 500 }, { ...input.quality, steps: 61 }, { ...input.quality, cfg: 16 }]) {
+   expect((await ctx.call('/jobs', 'POST', { ...input, requestId: crypto.randomUUID(), quality })).status).toBe(400)
+  }
+  const created = await (await ctx.call('/jobs', 'POST', input)).json() as any
+  expect(created).toMatchObject({ width: 768, height: 512, steps: 30, cfg: 6.5, requestedQuality: input.quality })
+  const completed = await waitFor(() => ctx.json('/jobs/' + created.id), job => job.status === 'completed')
+  expect(completed.requestedQuality).toEqual(input.quality)
+  const graph = ctx.fixture.submissions.at(-1).prompt
+  expect(graph['4'].inputs).toMatchObject({ width: 768, height: 512 })
+  expect(graph['5'].inputs).toMatchObject({ steps: 30, cfg: 6.5 })
+  expect((await (await ctx.call('/jobs', 'POST', input)).json() as any).id).toBe(created.id)
+  expect((await ctx.call('/jobs', 'POST', { ...input, quality: { ...input.quality, steps: 31 } })).status).toBe(409)
+  expect((await ctx.json('/creation')).configuration).toEqual(before.configuration)
+  expect((await ctx.json('/creation')).recommendation.verified).toBe(false)
+  await ctx.server.close()
+  const reopened = await ctx.create()
+  try { expect((await reopened.json('/jobs/' + created.id)).requestedQuality).toEqual(input.quality) } finally { await reopened.server.close() }
+ } finally { await ctx.cleanup() }
+})
