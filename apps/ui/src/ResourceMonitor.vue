@@ -55,6 +55,6 @@ onBeforeUnmount(() => { disposed = true; clearTimeout(timer); document.removeEve
       </div>
     </div>
     <p class="resource-disk" :title="sample?.disk.path"><HardDrive :size="12" aria-hidden="true"/><span>{{ live && sample?.disk.available !== null ? t("{0} libres", { 0: bytes(sample?.disk.available ?? null) }) : t('Disco sin lectura') }}</span></p>
-    <p class="resource-scope">{{ sample?.wsl ? t('Uso del entorno WSL') : t('Uso de todo el equipo') }}<span>{{ t('Disco de datos de Veltria') }}</span></p>
+    <p class="resource-scope">{{ sample?.wsl ? t('Uso del entorno WSL') : t('Uso de todo el equipo') }}<span>{{ t('Disco de datos de Kobocraft') }}</span></p>
   </section>
 </template>

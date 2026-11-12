@@ -19,7 +19,7 @@ onUnmounted(()=>clearInterval(timer))
 <template>
   <section class="download-manager" :aria-label="t('Lo descargado')">
     <div class="action-row"><h2 ref="listHeading" tabindex="-1">{{ t('Lo descargado') }}</h2><button class="secondary-button" :disabled="working||!connected" @click="cancel();load()">{{ t('Actualizar lista') }}</button></div>
-    <p>{{ t('Archivos del catálogo en la ubicación de modelos de Veltria. Los archivos ajenos al catálogo no se modifican.') }}</p>
+    <p>{{ t('Archivos del catálogo en la ubicación de modelos de Kobocraft. Los archivos ajenos al catálogo no se modifican.') }}</p>
     <p v-if="error" role="alert" class="warning">{{ t(error) }}</p><p v-if="notice" role="status">{{ t(notice) }}</p>
     <p v-if="!inventory" role="status">{{ connected?t('Leyendo los archivos…'):t('Conecta con el servicio para ver lo descargado.') }}</p>
     <template v-else>

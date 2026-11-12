@@ -31,8 +31,8 @@ watch(() => [props.connected, props.busy], () => { if (props.connected && !props
 </script>
 <template>
   <section class="managed-setup" aria-labelledby="managed-title">
-    <h3 id="managed-title">{{ t('Instalación propia de Veltria') }}</h3>
-    <p>{{ t('Veltria instalará lo necesario en una carpeta propia para crear en tu PC.') }}</p>
+    <h3 id="managed-title">{{ t('Instalación propia de Kobocraft') }}</h3>
+    <p>{{ t('Kobocraft instalará lo necesario en una carpeta propia para crear en tu PC.') }}</p>
     <template v-if="state && state.status !== 'idle'">
       <StorageNotice v-if="state.storageIssue && !plan" :issue="state.storageIssue" :disabled="pending || busy || !connected" @recheck="review" @relocate="relocate(state.storageIssue.target)"/>
       <p v-else-if="!state.storageIssue" role="status">{{ t(state.message) }}</p>

@@ -81,7 +81,7 @@ try {
   } catch [System.Net.WebException] { if ([int]$_.Exception.Response.StatusCode -ne 400) { throw } }
   $hardware = Get-Api 'hardware'
   if ($hardware.platform -ne 'win32' -or $hardware.wsl -or $hardware.cpu.logicalCores -lt 1 -or $hardware.ram.total -le 0) { throw 'Hardware Windows incorrecto' }
-  if ((Invoke-WebRequest -UseBasicParsing -Uri $origin).Content -notmatch '<title>Veltria</title>') { throw 'UI no disponible' }
+  if ((Invoke-WebRequest -UseBasicParsing -Uri $origin).Content -notmatch '<title>Kobocraft</title>') { throw 'UI no disponible' }
   $null = Patch-Settings @{theme='dark'; engineUrl='http://127.0.0.1:1'}
   $motor = (Invoke-WebRequest -UseBasicParsing -Uri "$origin/api/v1/engine/check" -Method POST -ContentType 'application/json' -Body '{}' -WebSession $session -Headers @{Origin=$origin; 'x-veltria-csrf'=$csrf}).Content | ConvertFrom-Json
   if ($motor.status -ne 'unavailable') { throw 'Fallo de motor no identificado' }

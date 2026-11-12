@@ -46,7 +46,7 @@
   ],
   "build": {
     "appId": "app.veltria.desktop",
-    "productName": "Veltria",
+    "productName": "Kobocraft",
     "asar": true,
     "directories": {
       "app": "apps/desktop",

@@ -3,7 +3,7 @@
   "version": "0.10.0",
   "private": true,
   "main": "dist/main.cjs",
-  "description": "Veltria \u2014 espacio creativo local",
-  "author": "Veltria",
+  "description": "Kobocraft — espacio creativo local",
+  "author": "Kobocraft",
   "dependencies": {}
 }

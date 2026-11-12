@@ -12,7 +12,7 @@ const percentage = computed(() => new Intl.NumberFormat(locale.value, { style: '
     <progress v-if="measured" :value="received" :max="total" :aria-label="t(label)" :aria-valuetext="percentage"></progress>
     <div v-else class="progress-activity" role="progressbar" :aria-label="t(label)" :aria-valuetext="t('En curso')"><span></span></div>
     <p v-if="measured" class="progress-details">{{ bytes(received) }} {{ t('de') }} {{ bytes(total!) }}</p>
-    <p v-else class="progress-details">{{ t('Esta etapa no tiene un porcentaje medible. Veltria sigue trabajando.') }}</p>
+    <p v-else class="progress-details">{{ t('Esta etapa no tiene un porcentaje medible. Kobocraft sigue trabajando.') }}</p>
     <p v-if="!connected" class="progress-details">{{ t('Sin conexión con el servicio. Mostrando el último avance recibido.') }}</p>
   </div>
 </template>

@@ -16,12 +16,12 @@ watch(() => props.job?.id, () => { mediaError.value = false })
 watch(() => props.plan, async plan => { if (plan) { consent.value = false; license.value = false; await nextTick(); if (!dialog.value?.open) dialog.value?.showModal() } else dialog.value?.close() })
 </script>
 <template>
-  <div class="page-heading"><div><h1 tabindex="-1">{{ t('Dale movimiento a tu idea.') }}</h1><p>{{ t('Describe la escena y el sonido. Veltria usará tu modelo de video existente.') }}</p></div><span class="private-badge">MiniMax H3</span></div>
+  <div class="page-heading"><div><h1 tabindex="-1">{{ t('Dale movimiento a tu idea.') }}</h1><p>{{ t('Describe la escena y el sonido. Kobocraft usará tu modelo de video existente.') }}</p></div><span class="private-badge">MiniMax H3</span></div>
   <div class="studio-grid first-image-studio video-studio">
     <section class="creation-panel" :aria-label="t('Tu video y su descripción')">
       <div class="canvas-header"><span>{{ t('VIDEO LOCAL') }}</span><span>{{ job ? `${job.width} × ${job.height} · ${job.frames} / ${job.fps} fps` : 'MiniMax H3' }}</span></div>
       <div class="canvas video-canvas" :class="{ 'result-canvas': file }">
-        <video v-if="file" :key="file" :src="file" controls playsinline preload="metadata" class="generated-video" :aria-label="t('Video creado con Veltria')" @error="mediaError = true"></video>
+        <video v-if="file" :key="file" :src="file" controls playsinline preload="metadata" class="generated-video" :aria-label="t('Video creado con Kobocraft')" @error="mediaError = true"></video>
         <div v-else class="video-placeholder"><Clapperboard :size="48" aria-hidden="true"/><h2>{{ active ? t('Tu video está tomando forma.') : t('Primero, una vista previa corta.') }}</h2><p>{{ active ? t('El resultado aparecerá aquí. El progreso llega del motor, sin tiempos inventados.') : t('Comprueba el perfil y crea una vista previa antes de pasar a un clip más largo.') }}</p></div>
       </div>
       <p v-if="mediaError" class="creation-feedback warning">{{ t('No se pudo reproducir este video. Puedes guardarlo para abrirlo con un reproductor compatible.') }}</p>

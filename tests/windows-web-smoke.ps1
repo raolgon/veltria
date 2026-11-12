@@ -21,7 +21,7 @@ try {
   $nonce = $Matches[2]
   $response = Invoke-WebRequest -UseBasicParsing -Uri "$origin/api/v1/session" -Method POST -ContentType 'application/json' -Headers @{Origin=$origin} -Body (@{nonce=$nonce} | ConvertTo-Json) -SessionVariable localSession
   if (-not ($response.Content | ConvertFrom-Json).csrf) { throw 'No se autorizo la sesion' }
-  if ((Invoke-WebRequest -UseBasicParsing -Uri $origin).Content -notmatch '<title>Veltria</title>') { throw 'No se sirvio la UI' }
+  if ((Invoke-WebRequest -UseBasicParsing -Uri $origin).Content -notmatch '<title>Kobocraft</title>') { throw 'No se sirvio la UI' }
   $resources = (Invoke-WebRequest -UseBasicParsing -Uri "$origin/api/v1/resources" -WebSession $localSession).Content | ConvertFrom-Json
   if ($resources.platform -ne 'win32' -or $resources.ram.total -le 0 -or $resources.disk.available -le 0) { throw 'Lectura de recursos Windows no valida' }
   Write-Output ('WINDOWS RESOURCES: ' + ($resources | ConvertTo-Json -Depth 5 -Compress))

@@ -70,7 +70,7 @@ try {
       const resources = resourcesSchema.parse(await (await res('/resources', { headers })).json())
       assert.ok(resources.ram.total! > 0); assert.ok(resources.disk.available! > 0); checks++
       const staticResponse = await fetch(origin)
-      assert.match(await staticResponse.text(), /<title>Veltria<\/title>/); assert.match(staticResponse.headers.get('content-security-policy')!, /script-src 'self'/); checks++
+      assert.match(await staticResponse.text(), /<title>Kobocraft<\/title>/); assert.match(staticResponse.headers.get('content-security-policy')!, /script-src 'self'/); checks++
       assert.equal((await res('/anything')).status, 401); checks++
       const streamAbort = new AbortController()
       const stream = await res('/events', { headers, signal: streamAbort.signal })

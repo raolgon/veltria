@@ -5,7 +5,10 @@ $p = $null
 $descriptor = $null
 try {
   $info = New-Object Diagnostics.ProcessStartInfo
-  $info.FileName = if ($Executable) { $Executable } else { Join-Path $Root ('release\'+(Get-Content -Raw (Join-Path $Root 'package.json') | ConvertFrom-Json).version+'\win-unpacked\Veltria.exe') }
+  $unpackedDir = Join-Path $Root ('release\'+(Get-Content -Raw (Join-Path $Root 'package.json') | ConvertFrom-Json).version+'\win-unpacked')
+  $defaultExe = Join-Path $unpackedDir 'Kobocraft.exe'
+  if (-not (Test-Path $defaultExe)) { $defaultExe = Join-Path $unpackedDir 'Veltria.exe' }
+  $info.FileName = if ($Executable) { $Executable } else { $defaultExe }
   $info.UseShellExecute = $false
   $info.EnvironmentVariables.Remove('ELECTRON_RUN_AS_NODE')
   $info.EnvironmentVariables['VELTRIA_DATA_DIR'] = $data
@@ -32,7 +35,7 @@ try {
   }
   for ($i=0; $i -lt 100; $i++) {
     $p.Refresh()
-    if ($p.MainWindowHandle -ne 0 -and $p.MainWindowTitle -eq 'Veltria') { break }
+    if ($p.MainWindowHandle -ne 0 -and ($p.MainWindowTitle -eq 'Kobocraft' -or $p.MainWindowTitle -eq 'Veltria')) { break }
     Start-Sleep -Milliseconds 100
   }
   if ($p.MainWindowHandle -eq 0) { throw 'Electron no mostro ventana nativa' }

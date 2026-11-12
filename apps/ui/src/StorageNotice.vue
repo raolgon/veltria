@@ -8,7 +8,7 @@ defineEmits<{ recheck: []; relocate: [] }>()
   <aside class="storage-notice" :role="issue.severity === 'error' ? 'alert' : 'status'">
     <strong>{{ t(issue.code === 'low-space' ? 'Queda poco espacio' : issue.code === 'permission-denied' ? 'Revisa los permisos de la carpeta' : issue.code === 'read-only' ? 'La carpeta es de sólo lectura' : issue.code === 'quota' ? 'Se alcanzó la cuota de almacenamiento' : issue.code === 'space-unknown' ? 'No se pudo comprobar el espacio' : 'Hace falta espacio libre') }}</strong>
     <p>{{ t(issue.message) }}</p>
-    <p class="storage-path">{{ t(issue.target === 'environment' ? 'Entorno' : issue.target === 'models' ? 'Modelos' : 'Datos de Veltria') }}: {{ issue.path }}</p>
+    <p class="storage-path">{{ t(issue.target === 'environment' ? 'Entorno' : issue.target === 'models' ? 'Modelos' : 'Datos de Kobocraft') }}: {{ issue.path }}</p>
     <p v-if="issue.requiredBytes !== null">{{ t('Necesario') }}: {{ bytes(issue.requiredBytes) }} · {{ t('Disponible') }}: {{ bytes(issue.availableBytes) }}</p>
     <div><button class="secondary-button" :disabled="disabled" @click="$emit('recheck')">{{ t('Volver a comprobar') }}</button><button v-if="issue.target !== 'data'" class="secondary-button" :disabled="disabled" @click="$emit('relocate')">{{ t('Cambiar carpeta') }}</button></div>
   </aside>

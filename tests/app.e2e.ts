@@ -28,7 +28,10 @@ test('navegador: estados reales, persistencia y Obsidian responsive', async ({ p
       await page.getByLabel('Describe lo que imaginas').blur()
       await nav.getByRole('button', { name: 'Ajustes' }).click()
       await page.getByRole('button', { name: theme, exact: true }).click()
+      const expectedLogo = theme === 'Claro' ? '/kobocraft-light.svg' : '/kobocraft-dark.svg'
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme === 'Claro' ? 'light' : 'dark')
+      await expect(page.locator(width <= 740 ? '.mobile-brand .brand-logo' : '.brand .brand-logo')).toHaveAttribute('src', expectedLogo)
+      await expect(page.locator('link[rel="icon"]')).toHaveAttribute('href', expectedLogo)
       await expect(page.getByText('Apariencia guardada en este equipo.')).toBeVisible()
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
       await nav.getByRole('button', { name: 'Mi equipo' }).click()

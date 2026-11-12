@@ -13,10 +13,11 @@ const t = (message: string) => translate(message, desktopLocale)
 async function run() {
   await app.whenReady()
   const root = app.isPackaged ? process.resourcesPath : resolve(__dirname, '../../..')
+  const uiDir = join(root, app.isPackaged ? 'ui' : 'apps/ui/dist')
   const executable = join(root, app.isPackaged ? 'service' : 'build/service', process.platform === 'win32' ? 'veltria-service.exe' : 'veltria-service')
-  service = await launchService({ executable, uiDir: join(root, app.isPackaged ? 'ui' : 'apps/ui/dist'), dataDir: dataDirectory(), onExit: message => { if (!quitting) { dialog.showErrorBox(t('Servicio detenido'), t(message)); app.quit() } } })
+  service = await launchService({ executable, uiDir, dataDir: dataDirectory(), onExit: message => { if (!quitting) { dialog.showErrorBox(t('Servicio detenido'), t(message)); app.quit() } } })
   const origin = service.ready.origin
-  mainWindow = new BrowserWindow({ width: 1380, height: 900, minWidth: 320, minHeight: 480, show: false, backgroundColor: '#171717', title: 'Veltria', autoHideMenuBar: true,
+  mainWindow = new BrowserWindow({ width: 1380, height: 900, minWidth: 320, minHeight: 480, show: false, backgroundColor: '#171717', title: 'Kobocraft', icon: join(uiDir, 'kobocraft-dark.png'), autoHideMenuBar: true,
     webPreferences: { preload: join(__dirname, 'preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true, webviewTag: false, navigateOnDragDrop: false }
   })
   ipcMain.handle('veltria:choose-engine-directory', async event => {
@@ -48,7 +49,10 @@ async function run() {
   await mainWindow.webContents.session.cookies.set({ url: origin, name: 'veltria_session', value: cookie, path: '/api/v1', httpOnly: true, sameSite: 'strict', secure: false })
   const applyPreferences = async () => {
     const result = await fetch(`${origin}/api/v1/settings`, { headers: { cookie: `veltria_session=${cookie}` } })
-    if (result.ok) { const settings = settingsSchema.parse(await result.json()); nativeTheme.themeSource = settings.theme; desktopLocale = settings.locale }
+    if (result.ok) {
+      const settings = settingsSchema.parse(await result.json()); nativeTheme.themeSource = settings.theme; desktopLocale = settings.locale
+      try { mainWindow?.setIcon(join(uiDir, nativeTheme.shouldUseDarkColors ? 'kobocraft-dark.png' : 'kobocraft-light.png')) } catch {}
+    }
   }
   await applyPreferences()
   // Node main only mirrors native chrome appearance; all product settings stay in Bun.
@@ -74,7 +78,7 @@ async function run() {
     void (async () => {
       const activity = await fetch(`${origin}/api/v1/activity`, { headers: { cookie: `veltria_session=${sessionCookie}` }, signal: AbortSignal.timeout(2000) }).then(r => r.json()).catch(() => null) as any
       if (activity?.preparing || activity?.jobs) {
-        const decision = await dialog.showMessageBox(mainWindow!, { type: 'question', title: t('Hay trabajo en curso'), message: t('Hay una preparación o creación en curso.'), detail: t('Si cierras, se conservarán los archivos descargados y las descripciones. Una generación interrumpida no se repetirá automáticamente.'), buttons: [t('Seguir en Veltria'), t('Cerrar y conservar progreso')], defaultId: 0, cancelId: 0 })
+        const decision = await dialog.showMessageBox(mainWindow!, { type: 'question', title: t('Hay trabajo en curso'), message: t('Hay una preparación o creación en curso.'), detail: t('Si cierras, se conservarán los archivos descargados y las descripciones. Una generación interrumpida no se repetirá automáticamente.'), buttons: [t('Seguir en Kobocraft'), t('Cerrar y conservar progreso')], defaultId: 0, cancelId: 0 })
         if (decision.response === 0) { confirmingClose = false; return }
       }
       quitting = true; themeStream?.abort(); await service?.stop(); mainWindow?.destroy(); app.quit()
@@ -90,4 +94,4 @@ app.on('before-quit', event => {
   void service?.stop().finally(() => app.quit())
   if (!service) app.quit()
 })
-run().catch(error => { dialog.showErrorBox(t('Veltria no pudo abrirse'), t(error instanceof Error ? error.message : 'Error de inicio')); app.quit() })
+run().catch(error => { dialog.showErrorBox(t('Kobocraft no pudo abrirse'), t(error instanceof Error ? error.message : 'Error de inicio')); app.quit() })
