@@ -7,6 +7,7 @@ export * from './catalog'
 export * from './setup'
 export * from './managed'
 export * from './storage-issue'
+export * from './lan'
 export const protocol = 9 as const
 export const development = { uiOrigin: 'http://127.0.0.1:43120', serviceOrigin: 'http://127.0.0.1:43121' } as const
 export const themeSchema = z.enum(['system', 'light', 'dark'])
@@ -28,8 +29,8 @@ export const engineUrlSchema = z.string().max(200).transform((value, ctx) => {
 export const settingsSchema = z.object({ theme: themeSchema, locale: localeSchema.default('es'), engineUrl: engineUrlSchema.nullable(), engineBinding: bindingSchema.nullable().default(null), modelsDirectory: z.string().min(1).max(1000).nullable().default(null) }).strict()
 export const settingsPatchSchema = z.object({ theme: themeSchema.optional(), locale: localeSchema.optional(), engineUrl: engineUrlSchema.nullable().optional(), engineBinding: bindingSchema.nullable().optional(), modelsDirectory: z.string().min(1).max(1000).nullable().optional() }).strict().refine(v => Object.keys(v).length > 0)
 export type Settings = z.infer<typeof settingsSchema>
-export const sessionSchema = z.object({ csrf: z.string().min(32), settings: settingsSchema })
-export const healthSchema = z.object({ name: z.literal('veltria'), protocol: z.literal(protocol), instanceId: z.string(), version: z.string(), runtime: z.string(), capabilities: z.object({ hardware: z.literal(true), engineProbe: z.literal(true), generation: z.boolean(), preparation: z.boolean(), video: z.boolean().default(false), lan: z.literal(false) }) })
+export const sessionSchema = z.object({ csrf: z.string().min(32), settings: settingsSchema, role: z.enum(['owner', 'lan']).default('owner'), hostName: z.string().optional(), deviceLabel: z.string().optional() })
+export const healthSchema = z.object({ name: z.literal('veltria'), protocol: z.literal(protocol), instanceId: z.string(), version: z.string(), runtime: z.string(), capabilities: z.object({ hardware: z.literal(true), engineProbe: z.literal(true), generation: z.boolean(), preparation: z.boolean(), video: z.boolean().default(false), lan: z.boolean() }) })
 const measurement = z.object({ total: z.number().nonnegative().nullable(), available: z.number().nonnegative().nullable(), source: z.string() })
 export const hardwareSchema = z.object({
   sampledAt: z.string(), host: z.string(), platform: z.string(), arch: z.string(), release: z.string(), wsl: z.boolean(),
@@ -46,5 +47,6 @@ export const engineSchema = z.object({
 })
 export type Engine = z.infer<typeof engineSchema>
 export const readySchema = z.object({ name: z.literal('veltria'), protocol: z.literal(protocol), instanceId: z.string(), origin: z.string().url(), nonce: z.string().min(32) }).strict()
-export const eventSchema = z.object({ sequence: z.number(), kind: z.enum(['connected', 'settings', 'engine', 'creation', 'jobs', 'video', 'setup']), instanceId: z.string() })
+export const eventSchema = z.object({ sequence: z.number(), kind: z.enum(['connected', 'settings', 'engine', 'creation', 'jobs', 'video', 'setup', 'lan']), instanceId: z.string() })
 export const errorSchema = z.object({ error: z.string(), message: z.string() })
+

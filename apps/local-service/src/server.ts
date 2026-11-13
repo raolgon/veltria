@@ -5,7 +5,7 @@ import staticFiles from '@fastify/static'
 import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { ServerResponse } from 'node:http'
 import { z } from 'zod'
-import { protocol, settingsPatchSchema, sessionSchema, healthSchema, engineSchema, createImageSchema, prepareRequestSchema, creationStateSchema, preparationSchema, jobSchema, librarySchema, prepareVideoSchema, createVideoSchema, videoJobSchema, catalogSchema, catalogSelectionSchema, storageSchema, removalPlanSchema, removalRequestSchema, imageConfigurationSchema, setupScanSchema, setupPlanRequestSchema, setupPrepareSchema, setupStateSchema, setupPlanSchema } from '@veltria/contracts'
+import { protocol, settingsPatchSchema, sessionSchema, healthSchema, engineSchema, createImageSchema, prepareRequestSchema, creationStateSchema, preparationSchema, jobSchema, librarySchema, prepareVideoSchema, createVideoSchema, videoJobSchema, catalogSchema, catalogSelectionSchema, storageSchema, removalPlanSchema, removalRequestSchema, imageConfigurationSchema, setupScanSchema, setupPlanRequestSchema, setupPrepareSchema, setupStateSchema, setupPlanSchema, lanEnableRequestSchema, lanPairRequestSchema, lanDecisionRequestSchema } from '@veltria/contracts'
 import { SettingsRepository, detectHardware, probeComfy, initialEngine, ResourceMonitor } from '@veltria/adapters'
 import { join, isAbsolute } from 'node:path'
 import { createReadStream } from 'node:fs'
@@ -14,6 +14,7 @@ import { CreationController, CreationError } from './creation'
 import { VideoController, type VideoOptions } from './video'
 import { SetupController, type SetupOptions } from './setup'
 import { ManagedController, type ManagedOptions } from './managed'
+import { LanController, type LanOptions } from './lan'
 import { managedStateSchema, managedPlanSchema, managedPrepareSchema } from '@veltria/contracts'
 import { mkdir, stat, writeFile } from 'node:fs/promises'
 
@@ -21,7 +22,20 @@ export const secret = () => randomBytes(32).toString('hex')
 function equal(a: unknown, b: string): boolean {
   return typeof a === 'string' && Buffer.byteLength(a) === Buffer.byteLength(b) && timingSafeEqual(Buffer.from(a), Buffer.from(b))
 }
-type Options = { dataDir: string; uiDir: string; controlToken: string; instanceId: string; devOrigin?: string; onShutdown?: () => void; creation?: Pick<ConstructorParameters<typeof CreationController>[0], 'profile' | 'profiles' | 'hardware' | 'disk' | 'engine' | 'allowLocalFixture'>; setup?: Pick<SetupOptions, 'discover'>; managed?: Pick<ManagedOptions, 'recipe' | 'allowLocalFixture' | 'disk' | 'install'>; video?: Pick<VideoOptions, 'hardware' | 'components' | 'probe' | 'engine' | 'disk'> }
+function isLanAllowedRoute(method: string, path: string): boolean {
+  if (method === 'GET' || method === 'HEAD') {
+    if (['/api/v1/session', '/api/v1/health', '/api/v1/identity', '/api/v1/activity', '/api/v1/settings', '/api/v1/hardware', '/api/v1/resources', '/api/v1/engine', '/api/v1/setup', '/api/v1/setup/managed', '/api/v1/catalog', '/api/v1/creation', '/api/v1/jobs', '/api/v1/video', '/api/v1/video/jobs', '/api/v1/events'].includes(path)) return true
+    if (path.startsWith('/api/v1/catalog/configurations/') || path.startsWith('/api/v1/jobs/') || path.startsWith('/api/v1/artifacts/') || path.startsWith('/api/v1/video/jobs/') || path.startsWith('/api/v1/video/artifacts/')) return true
+    return false
+  }
+  if (method === 'POST') {
+    if (['/api/v1/catalog/select', '/api/v1/jobs', '/api/v1/video/jobs', '/api/v1/lan/logout'].includes(path)) return true
+    if (/^\/api\/v1\/(video\/)?jobs\/[^/]+\/(cancel|reconcile)$/.test(path)) return true
+  }
+  return false
+}
+type SessionEntry = { csrf: string; expires: number; role: 'owner' | 'lan'; deviceId?: string; deviceLabel?: string }
+type Options = { dataDir: string; uiDir: string; controlToken: string; instanceId: string; devOrigin?: string; onShutdown?: () => void; creation?: Pick<ConstructorParameters<typeof CreationController>[0], 'profile' | 'profiles' | 'hardware' | 'disk' | 'engine' | 'allowLocalFixture'>; setup?: Pick<SetupOptions, 'discover'>; managed?: Pick<ManagedOptions, 'recipe' | 'allowLocalFixture' | 'disk' | 'install'>; video?: Pick<VideoOptions, 'hardware' | 'components' | 'probe' | 'engine' | 'disk'>; lan?: Pick<LanOptions, 'hostName' | 'allowLoopbackInterface' | 'interfaces'> }
 export async function createServer(options: Options) {
   const app = Fastify({ logger: false, bodyLimit: 32768, requestTimeout: 10_000, connectionTimeout: 10_000, keepAliveTimeout: 5000 })
   const database = join(options.dataDir, 'settings.sqlite'), existed = await stat(database).then(() => true).catch(() => false)
@@ -31,9 +45,9 @@ export async function createServer(options: Options) {
     await writeFile(join(directory, `before-catalog-${Date.now()}-${crypto.randomUUID()}.sqlite`), repository.db.serialize(), { flag: 'wx', mode: 0o600 })
   }
   const resources = new ResourceMonitor(options.dataDir)
-  const sessions = new Map<string, { csrf: string; expires: number }>()
+  const sessions = new Map<string, SessionEntry>()
   const nonces = new Map<string, number>()
-  const streams = new Map<ServerResponse, number>()
+  const streams = new Map<ServerResponse, { expires: number; token: string }>()
   let origin = '', sequence = 0, engine = initialEngine(repository.get().engineUrl), closing = false
   const engineAbort = new AbortController()
   const identity = { name: 'veltria' as const, protocol, instanceId: options.instanceId }
@@ -43,10 +57,10 @@ export async function createServer(options: Options) {
     if (nonces.size >= 32) throw new Error('Demasiados lanzamientos pendientes; espera un minuto.')
     const nonce = secret(); nonces.set(nonce, now + 60_000); return nonce
   }
-  function emit(kind: 'settings' | 'engine' | 'creation' | 'jobs' | 'video' | 'setup') {
+  function emit(kind: 'settings' | 'engine' | 'creation' | 'jobs' | 'video' | 'setup' | 'lan') {
     const payload = `id: ${++sequence}\ndata: ${JSON.stringify({ sequence, kind, instanceId: options.instanceId })}\n\n`
-    for (const [stream, expires] of streams) {
-      if (expires <= Date.now() || stream.writableLength > 64_000) stream.end()
+    for (const [stream, info] of streams) {
+      if (info.expires <= Date.now() || !sessions.has(info.token) || stream.writableLength > 64_000) stream.end()
       else stream.write(payload)
     }
   }
@@ -54,6 +68,25 @@ export async function createServer(options: Options) {
   const video = new VideoController({ ...options.video, dataDir: options.dataDir, repository, changed: () => emit('video') })
   const setup = new SetupController({ ...options.setup, settings: () => repository.get(), creation, changed: () => emit('setup') })
   const managed = new ManagedController({ ...options.managed, dataDir: options.dataDir, repository, creation, setup, changed: () => emit('setup') })
+  const lan = new LanController({
+    ...options.lan,
+    handler: (req, res) => app.routing(req, res),
+    issueSession: device => {
+      for (const [key, s] of sessions) if (s.expires < Date.now()) sessions.delete(key)
+      const token = secret(), csrf = secret()
+      sessions.set(token, { csrf, expires: Date.now() + 12 * 60 * 60 * 1000, role: 'lan', deviceId: device.id, deviceLabel: device.label })
+      return { token, csrf }
+    },
+    revokeDeviceSessions: deviceId => {
+      for (const [token, s] of sessions) {
+        if (s.role === 'lan' && (!deviceId || s.deviceId === deviceId)) {
+          sessions.delete(token)
+          for (const [stream, info] of streams) if (info.token === token) stream.end()
+        }
+      }
+    },
+    changed: () => emit('lan')
+  })
   // Serialize ownership changes, including requests from separate browser/desktop clients.
   let gpuAction: Promise<unknown> = Promise.resolve()
   function serialized<T>(work: () => Promise<T>): Promise<T> { const run = gpuAction.then(() => { if (managed.busy()) throw new CreationError('Espera o pausa la instalación del equipo antes de cambiar la configuración.'); return work() }); gpuAction = run.catch(() => {}); return run }
@@ -63,7 +96,8 @@ export async function createServer(options: Options) {
   const error = (reply: FastifyReply, status: number, code: string, message: string) => reply.code(status).send({ error: code, message })
   await app.register(cookie)
   app.addHook('onRequest', async (request, reply) => {
-    const allowed = [origin, options.devOrigin].filter(Boolean)
+    const isLan = lan.isLanRequest(request.raw)
+    const allowed = isLan ? [lan.origin()].filter(Boolean) : [origin, options.devOrigin].filter(Boolean)
     if (!allowed.some(o => new URL(o!).host === request.headers.host)) return error(reply, 403, 'HOST', 'Host no autorizado.')
     if (request.headers.origin && !allowed.includes(request.headers.origin)) return error(reply, 403, 'ORIGIN', 'Origen no autorizado.')
     if (request.headers['sec-fetch-site'] === 'cross-site') return error(reply, 403, 'ORIGIN', 'Solicitud desde otra web rechazada.')
@@ -74,18 +108,32 @@ export async function createServer(options: Options) {
     if (!path.startsWith('/api/')) return
     reply.header('Cache-Control', 'no-store')
     if (path.startsWith('/api/v1/control/')) {
+      if (isLan) return error(reply, 403, 'LAN', 'Control local no disponible en red.')
       if (!equal(request.headers['x-veltria-control'], options.controlToken)) return error(reply, 401, 'CONTROL', 'Control no autorizado.')
       return
     }
     if (path === '/api/v1/identity' && request.method === 'GET') return
+    if ((path === '/api/v1/lan/pair' || /^\/api\/v1\/lan\/pair\/[^/]+$/.test(path)) && request.method === 'POST') {
+      if (!request.headers.origin || !allowed.includes(request.headers.origin)) return error(reply, 403, 'ORIGIN', 'Se requiere un origen autorizado.')
+      return
+    }
     if (path === '/api/v1/session' && request.method === 'POST') {
+      if (isLan) return error(reply, 403, 'LAN', 'Usa el código de vinculación para conectar este dispositivo.')
       if (!request.headers.origin || !allowed.includes(request.headers.origin)) return error(reply, 403, 'ORIGIN', 'Se requiere un origen local autorizado.')
       return
     }
     const session = sessions.get(request.cookies.veltria_session ?? '')
-    if (!session || session.expires <= Date.now()) return error(reply, 401, 'SESSION', 'Sesión ausente o vencida. Vuelve a abrir Veltria desde el lanzador.')
+    if (!session || session.expires <= Date.now()) {
+      return error(reply, 401, isLan ? 'LAN_SESSION' : 'SESSION', isLan ? 'Vincula este dispositivo con el código o QR del equipo principal.' : 'Sesión ausente o vencida. Vuelve a abrir Veltria desde el lanzador.')
+    }
     if (!['GET', 'HEAD'].includes(request.method)) {
       if (!request.headers.origin || !equal(request.headers['x-veltria-csrf'], session.csrf)) return error(reply, 403, 'CSRF', 'La autorización de esta acción ha vencido. Vuelve a abrir Veltria.')
+    }
+    if (session.role === 'lan' || isLan) {
+      lan.touchDevice(session.deviceId)
+      if (!isLanAllowedRoute(request.method, path)) {
+        return error(reply, 403, 'FORBIDDEN', 'Esta acción sólo está disponible en el equipo principal.')
+      }
     }
   })
   app.setErrorHandler((cause, _request, reply) => {
@@ -98,7 +146,7 @@ export async function createServer(options: Options) {
   })
   app.addHook('preHandler', async (request) => {
     const path = request.url.split('?')[0]
-    if (managed.busy() && !['GET', 'HEAD'].includes(request.method) && path.startsWith('/api/') && !['/api/v1/setup/managed/pause', '/api/v1/control/shutdown', '/api/v1/control/launch', '/api/v1/session'].includes(path)) throw new CreationError('Espera o pausa la instalación del equipo antes de cambiar la configuración.')
+    if (managed.busy() && !['GET', 'HEAD'].includes(request.method) && path.startsWith('/api/') && !['/api/v1/setup/managed/pause', '/api/v1/control/shutdown', '/api/v1/control/launch', '/api/v1/session'].includes(path) && !path.startsWith('/api/v1/lan')) throw new CreationError('Espera o pausa la instalación del equipo antes de cambiar la configuración.')
   })
   app.get('/api/v1/identity', async () => identity)
   app.post('/api/v1/control/launch', async () => ({ ...identity, origin, nonce: issueNonce() }))
@@ -113,13 +161,44 @@ export async function createServer(options: Options) {
     if (!expires || expires < Date.now()) return error(reply, 401, 'NONCE', 'El enlace de apertura venció o ya se usó. Abre uno nuevo con el lanzador.')
     for (const [key, s] of sessions) if (s.expires < Date.now()) sessions.delete(key)
     if (sessions.size >= 128) return error(reply, 429, 'SESSIONS', 'Demasiadas sesiones locales.')
-    const token = secret(), session = { csrf: secret(), expires: Date.now() + 12 * 60 * 60 * 1000 }
+    const token = secret(), session: SessionEntry = { csrf: secret(), expires: Date.now() + 12 * 60 * 60 * 1000, role: 'owner' }
     sessions.set(token, session)
     reply.setCookie('veltria_session', token, { path: '/api/v1', httpOnly: true, sameSite: 'strict', secure: false, maxAge: 43200 })
-    return sessionSchema.parse({ csrf: session.csrf, settings: repository.get() })
+    return sessionSchema.parse({ csrf: session.csrf, role: 'owner', hostName: lan.host(), settings: repository.get() })
   })
-  app.get('/api/v1/session', async (request) => sessionSchema.parse({ csrf: sessions.get(request.cookies.veltria_session!)!.csrf, settings: repository.get() }))
-  app.get('/api/v1/health', async () => healthSchema.parse({ ...identity, version: '0.10.0', runtime: `Bun ${Bun.version}`, capabilities: { hardware: true, engineProbe: true, generation: true, preparation: true, video: true, lan: false } }))
+  app.get('/api/v1/session', async (request) => {
+    const session = sessions.get(request.cookies.veltria_session!)!
+    return sessionSchema.parse({ csrf: session.csrf, role: session.role, hostName: lan.host(), deviceLabel: session.deviceLabel, settings: repository.get() })
+  })
+  app.get('/api/v1/lan', async () => lan.state())
+  app.post('/api/v1/lan/enable', async request => { const input = lanEnableRequestSchema.parse(request.body); return lan.enable(input.address, input.port) })
+  app.post('/api/v1/lan/disable', async request => { z.object({}).strict().parse(request.body); return lan.disable() })
+  app.post('/api/v1/lan/code', async request => { z.object({}).strict().parse(request.body); return lan.refreshCode() })
+  app.post('/api/v1/lan/decision', async request => { const input = lanDecisionRequestSchema.parse(request.body); return lan.decide(input.requestId, input.approve) })
+  app.post('/api/v1/lan/revoke', async request => { const input = z.object({ deviceId: z.string().uuid() }).strict().parse(request.body); return lan.revokeDevice(input.deviceId) })
+  app.post('/api/v1/lan/pair', async request => {
+    const input = lanPairRequestSchema.parse(request.body)
+    return lan.requestPair(input.code, input.label, request.raw.socket.remoteAddress || '')
+  })
+  app.post('/api/v1/lan/pair/:id', async (request, reply) => {
+    const { id } = z.object({ id: z.string().uuid() }).parse(request.params)
+    z.object({}).strict().parse(request.body)
+    const claimed = lan.claimPair(id)
+    if (claimed.sessionToken) {
+      reply.setCookie('veltria_session', claimed.sessionToken, { path: '/api/v1', httpOnly: true, sameSite: 'strict', secure: false, maxAge: 43200 })
+    }
+    return claimed.response
+  })
+  app.post('/api/v1/lan/logout', async (request, reply) => {
+    z.object({}).strict().parse(request.body)
+    const token = request.cookies.veltria_session ?? ''
+    const session = sessions.get(token)
+    if (session?.deviceId) lan.revokeDevice(session.deviceId)
+    else sessions.delete(token)
+    reply.clearCookie('veltria_session', { path: '/api/v1' })
+    return { disconnected: true }
+  })
+  app.get('/api/v1/health', async () => healthSchema.parse({ ...identity, version: '0.10.0', runtime: `Bun ${Bun.version}`, capabilities: { hardware: true, engineProbe: true, generation: true, preparation: true, video: true, lan: true } }))
   app.get('/api/v1/activity', async () => { const image = creation.activity(), movie = video.activity(); return { preparing: managed.busy() || image.preparing || movie.preparing, jobs: image.jobs + movie.jobs } })
   app.get('/api/v1/settings', async () => repository.get())
   app.patch('/api/v1/settings', async request => serialized(async () => {
@@ -247,16 +326,16 @@ export async function createServer(options: Options) {
   app.get('/api/v1/events', async (request: FastifyRequest, reply) => {
     if (streams.size >= 64) return error(reply, 429, 'STREAMS', 'Demasiadas conexiones de eventos.')
     reply.hijack()
-    const stream = reply.raw
+    const stream = reply.raw, token = request.cookies.veltria_session!
     stream.socket?.setTimeout(0)
     stream.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive', 'X-Content-Type-Options': 'nosniff' })
     stream.write(`retry: 1500\ndata: ${JSON.stringify({ sequence, kind: 'connected', instanceId: options.instanceId })}\n\n`)
-    streams.set(stream, sessions.get(request.cookies.veltria_session!)!.expires)
+    streams.set(stream, { expires: sessions.get(token)!.expires, token })
     stream.on('close', () => streams.delete(stream))
   })
   const heartbeat = setInterval(() => {
-    for (const [stream, expires] of streams) {
-      if (expires <= Date.now() || stream.writableLength > 64_000) stream.end()
+    for (const [stream, info] of streams) {
+      if (info.expires <= Date.now() || !sessions.has(info.token) || stream.writableLength > 64_000) stream.end()
       else stream.write(': heartbeat\n\n')
     }
   }, 15_000)
@@ -271,6 +350,7 @@ export async function createServer(options: Options) {
     async close() {
       if (closing) return
       closing = true; engineAbort.abort()
+      await lan.close()
       await managed.close()
       await Promise.all([setup.close(), creation.close(), video.close()])
       for (const stream of streams.keys()) stream.end()

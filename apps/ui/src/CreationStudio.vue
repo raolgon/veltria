@@ -7,7 +7,7 @@ import { validImageQuality, profileDimensions, reduceImageQuality } from '@veltr
 import ImageQualityControls from './ImageQualityControls.vue'
 import IdeaArt from './IdeaArt.vue'
 const props = defineProps<{ state: CreationState | null; plan: PreparationPlan | null; job: ImageJob | null; prompt: string; quality: ImageQuality | null; format: 'square' | 'landscape' | 'portrait'; connected: boolean; busy: boolean; error: string }>()
-const emit = defineEmits<{ 'update:quality': [value: ImageQuality | null]; 'update:prompt': [value: string]; 'update:format': [value: 'square' | 'landscape' | 'portrait']; plan: []; prepare: []; resume: []; pause: []; create: []; cancel: [id: string]; reconcile: [id: string]; closePlan: []; modelsDirectory: [path: string]; device: []; models: []; setup: [] }>()
+const emit = defineEmits<{ 'update:quality': [value: ImageQuality | null]; 'update:prompt': [value: string]; 'update:format': [value: 'square' | 'landscape' | 'portrait']; plan: []; prepare: []; resume: []; pause: []; create: []; cancel: [id: string]; reconcile: [id: string]; closePlan: []; modelsDirectory: [path: string]; device: []; models: []; setup: []; dismiss: [] }>()
 const dialog = ref<HTMLDialogElement | null>(null), consent = ref(false), location = ref(''), recoveryNotice = ref('')
 const preparing = computed(() => !!props.state && ['downloading', 'verifying', 'starting'].includes(props.state.preparation.status))
 const activeJob = computed(() => !!props.job && ['queued', 'submitting', 'running', 'saving'].includes(props.job.status))
@@ -82,7 +82,7 @@ watch(() => props.plan, async plan => {
             <pre v-if="job.failure?.detail" class="failure-trace">{{ job.failure.detail }}</pre>
           </details>
         </div>
-        <div class="action-row"><a v-if="image" :href="image + '?download=1'" class="primary-button" download><Download :size="16"/>{{ t('Guardar imagen') }}</a><button v-if="activeJob && !['submitting', 'saving'].includes(job.status)" class="text-button" :disabled="busy" @click="emit('cancel', job.id)">{{ t('Cancelar esta creación') }}</button><button v-if="job.status === 'interrupted' && job.enginePromptId" class="text-button" :disabled="busy" @click="emit('reconcile', job.id)">{{ t('Comprobar si terminó') }}</button></div>
+        <div class="action-row"><a v-if="image" :href="image + '?download=1'" class="primary-button" download><Download :size="16"/>{{ t('Guardar imagen') }}</a><button v-if="!activeJob" type="button" class="secondary-button" :disabled="busy" :title="t('La imagen sigue guardada en tu biblioteca.')" @click="emit('dismiss')"><X :size="16"/>{{ t('Quitar del lienzo') }}</button><button v-if="activeJob && !['submitting', 'saving'].includes(job.status)" class="text-button" :disabled="busy" @click="emit('cancel', job.id)">{{ t('Cancelar esta creación') }}</button><button v-if="job.status === 'interrupted' && job.enginePromptId" class="text-button" :disabled="busy" @click="emit('reconcile', job.id)">{{ t('Comprobar si terminó') }}</button></div>
       </div>
       <div class="prompt-section"><label for="prompt"><Sparkles :size="17"/>{{ t('Describe lo que imaginas') }}</label><textarea id="prompt" :value="prompt" maxlength="4000" :placeholder="t('Un lugar, una escena, algo que todavía no existe…')" @input="emit('update:prompt', ($event.target as HTMLTextAreaElement).value)"></textarea><div class="prompt-bottom"><span>{{ t('Tu descripción se conserva durante la preparación.') }}</span><span>{{ prompt.length }} / 4000</span></div></div>
     </section>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onBeforeUnmount, ref, watch, nextTick } from 'vue'
-import { Sparkles, Monitor, Settings2, ChevronRight, ShieldCheck, LockKeyhole, Image as ImageIcon, Sun, Moon, Cpu, HardDrive, RefreshCw, ArrowRight, AlertTriangle, Info, Check, Wifi, Layers3, FolderOpen } from '@lucide/vue'
-import { eventSchema, type Settings, type Locale, type Hardware, type Engine, type CreationState, type PreparationPlan, type ImageJob, type ImageQuality, type VideoState, type VideoPlan, type VideoJob, type Catalog, type SetupState } from '@veltria/contracts'
+import { Sparkles, Monitor, Settings2, ChevronRight, ShieldCheck, LockKeyhole, Image as ImageIcon, Sun, Moon, Cpu, HardDrive, RefreshCw, ArrowRight, AlertTriangle, Info, Check, Wifi, Layers3, FolderOpen, Smartphone, X, QrCode } from '@lucide/vue'
+import { eventSchema, type Settings, type Locale, type Hardware, type Engine, type CreationState, type PreparationPlan, type ImageJob, type ImageQuality, type VideoState, type VideoPlan, type VideoJob, type Catalog, type SetupState, type LanState } from '@veltria/contracts'
 import { bytes, t, date, locale, setLocale } from './i18n'
 import CreationStudio from './CreationStudio.vue'
 import ImageLibrary from './ImageLibrary.vue'
@@ -11,20 +11,24 @@ import SetupWizard from './SetupWizard.vue'
 import WelcomeSetup from './WelcomeSetup.vue'
 import ModelCatalog from './ModelCatalog.vue'
 import ResourceMonitor from './ResourceMonitor.vue'
+import LanSettings from './LanSettings.vue'
+import LanPairScreen from './LanPairScreen.vue'
 import { validImageQuality } from '@veltria/core'
-import { api } from './api'
+import { api, ApiError } from './api'
 import type { ManagedState } from '@veltria/contracts'
 import { es } from './copy'
 type View = 'create' | 'models' | 'library' | 'device' | 'settings'
 const navigation = computed(() => [{ id: 'create', label: t(es.create), icon: Sparkles }, { id: 'models', label: t('Modelos'), icon: Layers3 }, { id: 'library', label: t('Biblioteca'), icon: FolderOpen }, { id: 'device', label: t(es.device), icon: Monitor }, { id: 'settings', label: t(es.settings), icon: Settings2 }] as const)
 const view = ref<View>('create'), settings = ref<Settings>({ theme: 'system', locale: locale.value, engineUrl: null, engineBinding: null, modelsDirectory: null })
 const connected = ref(false), loading = ref(true), saving = ref(false), probing = ref(false), error = ref(''), notice = ref('')
+const sessionRole = ref<'owner' | 'lan'>('owner'), hostName = ref(''), deviceLabel = ref(''), lanState = ref<LanState | null>(null)
+const needsLanPair = ref(false), initialPairToken = ref<string | null>(null), lanModalOpen = ref(false)
 const hardware = ref<Hardware | null>(null), hardwareError = ref(''), hardwareBusy = ref(false), engine = ref<Engine | null>(null)
 const setupOpen = ref(false), setupState = ref<SetupState | null>(null)
 const managed = ref<ManagedState | null>(null)
 const managedBusy = computed(() => ['downloading', 'installing', 'preparing'].includes(managed.value?.status || ''))
 const catalog = ref<Catalog | null>(null)
-const needsSetup = computed(() => managedBusy.value || !creation.value?.bound || !(catalog.value?.models.some(model => model.status === 'prepared')))
+const needsSetup = computed(() => sessionRole.value === 'owner' && (managedBusy.value || !creation.value?.bound || !(catalog.value?.models.some(model => model.status === 'prepared'))))
 const creation = ref<CreationState | null>(null), plan = ref<PreparationPlan | null>(null), jobs = ref<ImageJob[]>([]), totalJobs = ref(0), operationBusy = ref(false)
 const mediaKind = ref<'image' | 'video'>('image'), videoState = ref<VideoState | null>(null), videoPlan = ref<VideoPlan | null>(null), videoJobs = ref<VideoJob[]>([]), totalVideos = ref(0), videoPrompt = ref(''), videoPreset = ref<'preview' | 'short'>('preview'), selectedVideoId = ref('')
 const selectedVideo = computed(() => videoJobs.value.find(job => job.id === selectedVideoId.value) || videoState.value?.activeJob || null)
@@ -48,12 +52,15 @@ async function refresh() {
   if (refreshPending) { refreshQueued = true; return }
   refreshPending = true
   try {
-    const [saved, motor, studio, library, movies, movieLibrary, modelCatalog, setup, installation] = await Promise.all([api.settings(), api.engine(), api.creation(), api.jobs(), api.video(), api.videos(), api.catalog(), api.setup(), api.managed()])
+    const [saved, motor, studio, library, movies, movieLibrary, modelCatalog, setup, installation, lanInfo] = await Promise.all([
+      api.settings(), api.engine(), api.creation(), api.jobs(), api.video(), api.videos(), api.catalog(), api.setup(), api.managed(),
+      sessionRole.value === 'owner' ? api.lan().catch(() => null) : Promise.resolve(null)
+    ])
     if (creation.value?.configuration.id !== studio.configuration.id) {
       const initial = !creation.value
       quality.value = null; format.value = studio.configuration.format; selectedJobId.value = ''; plan.value = null
       if (initial) {
-        if (!studio.activeJob && library.jobs[0]) {
+        if (!studio.activeJob && library.jobs[0] && localStorage.getItem('kobocraft-dismissed-job') !== library.jobs[0].id) {
           selectedJobId.value = library.jobs[0].id
           if (!prompt.value.trim()) prompt.value = library.jobs[0].prompt
         }
@@ -67,15 +74,22 @@ async function refresh() {
         } catch {}
       }
     }
-    settings.value = saved; engine.value = motor; creation.value = studio; totalJobs.value = library.total
+    if (sessionRole.value === 'owner') settings.value = saved
+    else settings.value = { ...saved, theme: settings.value.theme, locale: settings.value.locale }
+    engine.value = motor; creation.value = studio; totalJobs.value = library.total
     managed.value = installation; setupState.value = setup; catalog.value = modelCatalog; videoState.value = movies; totalVideos.value = movieLibrary.total
+    if (lanInfo) lanState.value = lanInfo
     videoJobs.value = [...movieLibrary.jobs, ...videoJobs.value.filter(job => !movieLibrary.jobs.some(incoming => incoming.id === job.id))]
     const older = jobs.value.filter(job => !library.jobs.some(incoming => incoming.id === job.id))
     jobs.value = [...library.jobs, ...older]
     if (!bindingDirty.value) { bindingDirectory.value = saved.engineBinding?.directory || ''; bindingPython.value = saved.engineBinding?.python || '' }
     if (!engineDirty.value) engineAddress.value = saved.engineUrl || 'http://127.0.0.1:8188'
     connected.value = true
-  } catch (cause) { connected.value = false; error.value = message(cause) }
+  } catch (cause) {
+    connected.value = false
+    if (cause instanceof ApiError && cause.code === 'LAN_SESSION') { needsLanPair.value = true; error.value = '' }
+    else error.value = message(cause)
+  }
   finally { refreshPending = false; if (refreshQueued) { refreshQueued = false; void refresh() } }
 }
 async function refreshHardware() {
@@ -87,7 +101,14 @@ async function connect() {
   if (loading.value && stream) return
   loading.value = true; error.value = ''; stream?.close()
   try {
-    settings.value = await api.authorize()
+    const saved = await api.authorize()
+    const meta = api.sessionMeta()
+    sessionRole.value = meta.role
+    hostName.value = meta.hostName || ''
+    deviceLabel.value = meta.deviceLabel || ''
+    needsLanPair.value = false
+    initialPairToken.value = null
+    settings.value = saved
     await api.health(); connected.value = true
     await refresh()
     stream = new EventSource('/api/v1/events')
@@ -98,12 +119,23 @@ async function connect() {
     stream.onopen = () => { connected.value = true; error.value = ''; void refresh() }
     await refreshHardware()
     if (needsSetup.value && !managedBusy.value) scanSetup()
-  } catch (cause) { connected.value = false; error.value = message(cause) }
+  } catch (cause) {
+    connected.value = false
+    if (cause instanceof ApiError && cause.code === 'LAN_SESSION') {
+      needsLanPair.value = true
+      error.value = ''
+    } else {
+      error.value = message(cause)
+    }
+  }
   finally { loading.value = false }
 }
 async function changeTheme(theme: Settings['theme']) {
   settings.value = { ...settings.value, theme }; notice.value = ''; applyTheme()
-  if (!connected.value) { notice.value = 'Apariencia temporal en esta pantalla. Se guardará cuando vuelvas a elegirla con el servicio conectado.'; return }
+  if (sessionRole.value === 'lan' || !connected.value) {
+    notice.value = sessionRole.value === 'lan' ? 'Apariencia aplicada en este dispositivo.' : 'Apariencia temporal en esta pantalla. Se guardará cuando vuelvas a elegirla con el servicio conectado.'
+    return
+  }
   saving.value = true
   try { settings.value = await api.save({ theme }); notice.value = 'Apariencia guardada en este equipo.' }
   catch (cause) { error.value = message(cause); notice.value = 'El cambio es temporal: no se pudo guardar.' }
@@ -111,11 +143,25 @@ async function changeTheme(theme: Settings['theme']) {
 }
 async function changeLanguage(value: Locale) {
   settings.value = { ...settings.value, locale: value }; notice.value = ''
-  if (!connected.value) { notice.value = 'Idioma temporal: vuelve a elegirlo con el servicio conectado para guardarlo.'; return }
+  if (sessionRole.value === 'lan' || !connected.value) {
+    notice.value = sessionRole.value === 'lan' ? 'Idioma aplicado en este dispositivo.' : 'Idioma temporal: vuelve a elegirlo con el servicio conectado para guardarlo.'
+    return
+  }
   saving.value = true
   try { settings.value = await api.save({ locale: value }); notice.value = 'Idioma guardado en este equipo.' }
   catch (cause) { error.value = message(cause); notice.value = 'Idioma temporal: vuelve a elegirlo con el servicio conectado para guardarlo.' }
   finally { saving.value = false }
+}
+function enableLan(address: string) { void operation(async () => { lanState.value = await api.enableLan(address); notice.value = 'Red local activada. Escanea el código QR o usa el código de 6 dígitos desde otro dispositivo.' }) }
+function disableLan() { void operation(async () => { lanState.value = await api.disableLan(); notice.value = 'Acceso en red local desactivado.' }) }
+function refreshLanCode() { void operation(async () => { lanState.value = await api.refreshLanCode(); notice.value = 'Se generó un nuevo código de vinculación.' }) }
+function decideLan(requestId: string, approve: boolean) { void operation(async () => { lanState.value = await api.decideLan(requestId, approve); notice.value = approve ? 'Dispositivo vinculado a tu red local.' : 'Solicitud rechazada.' }) }
+function revokeLanDevice(deviceId: string) { void operation(async () => { lanState.value = await api.revokeLanDevice(deviceId); notice.value = 'Dispositivo desconectado de la red local.' }) }
+async function logoutLan() {
+  try { await api.logoutLan() } catch {}
+  stream?.close()
+  connected.value = false
+  needsLanPair.value = true
 }
 async function saveEngine(disconnect = false) {
   saving.value = true; error.value = ''; notice.value = ''
@@ -190,6 +236,7 @@ function cancelJob(id: string) { void operation(async () => { await api.cancel(i
 function reconcileJob(id: string) { void operation(async () => { await api.reconcile(id) }) }
 function changeModelsDirectory(path: string) { void operation(async () => { settings.value = await api.save({ modelsDirectory: path }); plan.value = await api.plan() }) }
 function saveBinding() { void operation(async () => { settings.value = await api.save({ engineBinding: { directory: bindingDirectory.value.trim(), python: bindingPython.value.trim() } }); bindingDirty.value = false; notice.value = 'Motor vinculado. Kobocraft reutilizará su instalación para preparar el perfil.' }) }
+function dismissJob() { const current = selectedJob.value; if (current) localStorage.setItem('kobocraft-dismissed-job', current.id); selectedJobId.value = '' }
 function reuse(job: ImageJob) { prompt.value = job.prompt; format.value = job.format; quality.value = job.requestedQuality && validImageQuality(job.requestedQuality, creation.value?.profile) ? { ...job.requestedQuality } : null; selectedJobId.value = job.id; void navigate('create') }
 function moreJobs() { void operation(async () => { const page = await api.jobs(jobs.value.length); jobs.value.push(...page.jobs); totalJobs.value = page.total }) }
 
@@ -207,6 +254,8 @@ watch(() => settings.value.locale, setLocale, { immediate: true })
 onMounted(() => {
   media = matchMedia('(prefers-color-scheme: dark)'); systemDark.value = media.matches; media.addEventListener('change', mediaChange)
   try { const cached = localStorage.getItem('veltria-theme-cache'); if (cached === 'light' || cached === 'dark') settings.value.theme = cached; prompt.value = sessionStorage.getItem('veltria-draft') || ''; videoPrompt.value = sessionStorage.getItem('veltria-video-draft') || '' } catch {}
+  initialPairToken.value = api.consumePairToken()
+  if (initialPairToken.value) { needsLanPair.value = true; loading.value = false; applyTheme(); return }
   applyTheme(); void connect()
 })
 watch(videoPrompt, value => { try { sessionStorage.setItem('veltria-video-draft', value) } catch {} })
@@ -217,7 +266,8 @@ onBeforeUnmount(() => { destroyed = true; stream?.close(); media?.removeEventLis
 
 <template>
   <a class="skip-link" href="#content">{{ t('Ir al contenido') }}</a>
-  <WelcomeSetup v-if="needsSetup" :catalog="catalog" :hardware="hardware" :state="setupState" :managed="managed" :preparation="creation?.preparation" :connected="connected" :loading="loading" :busy="operationBusy || managedBusy" :error="error || hardwareError" :dark="isDark" @select="chooseSetupModel" @scan="scanSetup" @prepare="prepareSetup" @pause="pauseProfile" @refresh="refresh" @reconnect="connect" @theme="changeTheme(isDark ? 'light' : 'dark')" @language="changeLanguage(locale === 'es' ? 'en' : 'es')"/>
+  <LanPairScreen v-if="needsLanPair" :initial-token="initialPairToken" :dark="isDark" @paired="connect" @theme="changeTheme(isDark ? 'light' : 'dark')" @language="changeLanguage(locale === 'es' ? 'en' : 'es')"/>
+  <WelcomeSetup v-else-if="needsSetup" :catalog="catalog" :hardware="hardware" :state="setupState" :managed="managed" :preparation="creation?.preparation" :connected="connected" :loading="loading" :busy="operationBusy || managedBusy" :error="error || hardwareError" :dark="isDark" @select="chooseSetupModel" @scan="scanSetup" @prepare="prepareSetup" @pause="pauseProfile" @refresh="refresh" @reconnect="connect" @theme="changeTheme(isDark ? 'light' : 'dark')" @language="changeLanguage(locale === 'es' ? 'en' : 'es')"/>
   <div v-else class="app-shell" :class="{ 'creating-view': view === 'create' }">
     <aside class="sidebar">
       <a class="brand" href="#" @click.prevent="navigate('create')" :aria-label="t('Kobocraft, ir a crear')"><img class="brand-logo" :src="isDark ? '/kobocraft-dark.svg' : '/kobocraft-light.svg'" alt="" width="30" height="30"/><span>KOBOCRAFT</span><span class="brand-dot"></span></a>
@@ -226,13 +276,17 @@ onBeforeUnmount(() => { destroyed = true; stream?.close(); media?.removeEventLis
       <div class="sidebar-bottom"><ResourceMonitor :connected="connected" :cpu-name="hardware?.cpu.name"/><div class="sidebar-footer"><span class="version">KOBOCRAFT <span>{{ t('0.10 / IMÁGENES') }}</span></span><button class="icon-button" :disabled="saving" :aria-label="isDark ? t('Cambiar a modo claro') : t('Cambiar a modo oscuro')" @click="changeTheme(isDark ? 'light' : 'dark')"><Sun v-if="isDark" :size="19"/><Moon v-else :size="19"/></button></div></div>
     </aside>
     <div class="main-shell">
-      <header class="topbar"><a class="mobile-brand" href="#" @click.prevent="navigate('create')" :aria-label="t('Kobocraft, ir a crear')"><img class="brand-logo" :src="isDark ? '/kobocraft-dark.svg' : '/kobocraft-light.svg'" alt="" width="26" height="26"/><span>KOBOCRAFT</span></a><div class="breadcrumb">{{ t('Estudio') }} <ChevronRight :size="13"/><span>{{ heading }}</span></div><div class="topbar-right"><span class="local-note"><ShieldCheck :size="15"/>{{ t(connected ? es.connected : es.disconnected) }}</span><button class="icon-button mobile-theme-switch" :disabled="saving" :aria-label="isDark ? t('Cambiar a modo claro') : t('Cambiar a modo oscuro')" @click="changeTheme(isDark ? 'light' : 'dark')"><Sun v-if="isDark" :size="19"/><Moon v-else :size="19"/></button></div></header>
+      <header class="topbar"><a class="mobile-brand" href="#" @click.prevent="navigate('create')" :aria-label="t('Kobocraft, ir a crear')"><img class="brand-logo" :src="isDark ? '/kobocraft-dark.svg' : '/kobocraft-light.svg'" alt="" width="26" height="26"/><span>KOBOCRAFT</span></a><div class="breadcrumb">{{ t('Estudio') }} <ChevronRight :size="13"/><span>{{ heading }}</span></div><div class="topbar-right"><button v-if="sessionRole === 'owner'" type="button" :class="['topbar-lan-btn', { active: lanState?.enabled, pending: (lanState?.pendingRequests.length || 0) > 0 }]" @click="lanModalOpen = true"><QrCode :size="16"/><span>{{ lanState?.enabled ? t('Red local · QR') : t('Conectar móvil') }}</span><span v-if="lanState?.pendingRequests.length" class="lan-count-pill">{{ lanState.pendingRequests.length }}</span><span v-else-if="lanState?.enabled" class="lan-live-dot" aria-hidden="true"></span></button><span class="local-note"><Wifi v-if="sessionRole === 'lan' || lanState?.enabled" :size="15"/><ShieldCheck v-else :size="15"/>{{ sessionRole === 'lan' ? `${t('Conectado en red a')} ${hostName || 'PC'}` : t(connected ? es.connected : es.disconnected) }}</span><button class="icon-button mobile-theme-switch" :disabled="saving" :aria-label="isDark ? t('Cambiar a modo claro') : t('Cambiar a modo oscuro')" @click="changeTheme(isDark ? 'light' : 'dark')"><Sun v-if="isDark" :size="19"/><Moon v-else :size="19"/></button></div></header>
+      <div v-for="req in lanState?.pendingRequests || []" :key="req.id" class="lan-approval-banner" role="region" :aria-label="t('Solicitud de vinculación en red local')">
+        <div class="lan-approval-text"><Smartphone :size="18"/><span><strong>{{ req.label }}</strong> ({{ req.address }}) {{ t('quiere conectarse a Kobocraft en tu red local.') }}</span></div>
+        <div class="action-row"><button type="button" class="primary-button" :disabled="operationBusy" @click="decideLan(req.id, true)"><Check :size="15"/>{{ t('Aprobar dispositivo') }}</button><button type="button" class="secondary-button" :disabled="operationBusy" @click="decideLan(req.id, false)"><X :size="15"/>{{ t('Rechazar') }}</button></div>
+      </div>
       <div v-if="error" class="service-alert" role="alert"><AlertTriangle :size="18"/><span>{{ t(error) }}</span><button class="secondary-button" :disabled="loading" @click="connect">{{ t('Volver a conectar') }}</button><button class="icon-button" :aria-label="t('Cerrar aviso')" @click="error = ''">×</button></div>
       <p v-if="notice" class="service-notice" role="status">{{ t(notice) }}</p>
       <main id="content">
         <section v-if="managed && managed.status !== 'idle' && managed.status !== 'ready'" class="preparation-feedback" aria-live="polite"><p>{{ t(managed.message) }}</p><button class="secondary-button" @click="openSetup">{{ t('Ver preparación del equipo') }}</button></section>
         <div v-if="view === 'create' || view === 'library'" class="media-tabs" role="group" :aria-label="t('Tipo de contenido')"><button :class="{ selected: mediaKind === 'image' }" :aria-pressed="mediaKind === 'image'" @click="mediaKind = 'image'">{{ t('Imágenes') }}</button><button :class="{ selected: mediaKind === 'video' }" :aria-pressed="mediaKind === 'video'" @click="mediaKind = 'video'">{{ t('Video') }}</button></div>
-        <CreationStudio v-if="view === 'create' && mediaKind === 'image'" v-model:prompt="prompt" v-model:format="format" v-model:quality="quality" :state="creation" :plan="plan" :job="selectedJob" :connected="connected" :busy="operationBusy" :error="error" @plan="reviewPlan" @prepare="prepareProfile" @resume="resumeProfile" @pause="pauseProfile" @create="generate" @cancel="cancelJob" @reconcile="reconcileJob" @close-plan="plan = null" @models-directory="changeModelsDirectory" @device="navigate('device')" @models="navigate('models')" @setup="openSetup"/>
+        <CreationStudio v-if="view === 'create' && mediaKind === 'image'" v-model:prompt="prompt" v-model:format="format" v-model:quality="quality" :state="creation" :plan="plan" :job="selectedJob" :connected="connected" :busy="operationBusy" :error="error" @plan="reviewPlan" @prepare="prepareProfile" @resume="resumeProfile" @pause="pauseProfile" @create="generate" @cancel="cancelJob" @reconcile="reconcileJob" @close-plan="plan = null" @models-directory="changeModelsDirectory" @device="navigate('device')" @models="navigate('models')" @setup="openSetup" @dismiss="dismissJob"/>
         <VideoStudio v-else-if="view === 'create'" v-model:prompt="videoPrompt" v-model:preset="videoPreset" :state="videoState" :plan="videoPlan" :job="selectedVideo" :connected="connected" :busy="operationBusy" :error="error" @plan="reviewVideoPlan" @prepare="prepareVideo" @pause="pauseVideo" @create="generateVideo" @cancel="cancelVideo" @reconcile="reconcileVideo" @close-plan="videoPlan = null" @device="navigate('device')"/>
         <ImageLibrary v-else-if="view === 'library' && mediaKind === 'image'" :jobs="jobs" :total="totalJobs" :busy="operationBusy" @reuse="reuse" @more="moreJobs" @create="navigate('create')"/>
         <VideoLibrary v-else-if="view === 'library'" :jobs="videoJobs" :total="totalVideos" :busy="operationBusy" @reuse="reuseVideo" @more="moreVideos" @create="navigate('create')"/>
@@ -246,21 +300,27 @@ onBeforeUnmount(() => { destroyed = true; stream?.close(); media?.removeEventLis
             <dl class="hardware-list"><div><dt><Cpu :size="18"/>{{ t('Procesador') }}</dt><dd>{{ hardware.cpu.name || t(es.unknown) }}<small>{{ hardware.cpu.logicalCores }} {{ t('procesadores lógicos ·') }} {{ t(hardware.cpu.source) }}</small></dd></div><div><dt>{{ t('Memoria RAM') }}</dt><dd>{{ bytes(hardware.ram.total) }} total · {{ bytes(hardware.ram.available) }} {{ t('disponible') }}<small>{{ t(hardware.ram.source) }}</small></dd></div><div><dt><HardDrive :size="18"/>{{ t('Disco de datos') }}</dt><dd>{{ bytes(hardware.disk.total) }} total · {{ bytes(hardware.disk.available) }} {{ t('disponible') }}<small>{{ hardware.disk.path }} · {{ t(hardware.disk.source) }}</small></dd></div><div v-for="(gpu, index) in hardware.gpus" :key="index"><dt>GPU {{ index + 1 }}</dt><dd>{{ gpu.name }}<small>VRAM: {{ bytes(gpu.vramTotal) }} total · {{ bytes(gpu.vramAvailable) }} {{ t('libre · Controlador:') }} {{ gpu.driver || t(es.unknown) }}<br>{{ t(gpu.source) }}</small></dd></div><div v-if="!hardware.gpus.length"><dt>GPU</dt><dd>{{ t('Desconocida') }}<small>{{ t('No se pudo obtener un inventario fiable.') }}</small></dd></div></dl>
             <details class="measurement-details"><summary>{{ t('Fuentes y límites de esta medición') }}</summary><p v-for="note in hardware.notes" :key="note">{{ t(note) }}</p><p>{{ t('Medido:') }} {{ date(hardware.sampledAt) }}</p></details>
           </template>
-          <section class="setup-card real-setup"><div><h2>{{ t('Preparar mi equipo') }}</h2><p>{{ t('Kobocraft puede encontrar una instalación existente y preparar lo necesario para crear, sin pedirte rutas de Python.') }}</p></div><button class="primary-button" :disabled="!connected || operationBusy" @click="openSetup">{{ t('Revisar mi equipo') }}</button></section>
-          <details class="settings-card advanced-connection"><summary>{{ t('Avanzado · Usar una instalación existente de ComfyUI') }}</summary><p>{{ t('Comprobación técnica local. Guarda la dirección y consulta capacidades sin modificar su instalación. No es la incorporación final para principiantes.') }}</p><form @submit.prevent="saveEngine()"><label for="engine-address">{{ t('Dirección local de ComfyUI') }}</label><input id="engine-address" v-model="engineAddress" type="text" class="text-input" maxlength="200" inputmode="url" :disabled="!connected || probing || saving" aria-describedby="engine-hint" @input="engineDirty = true"><p id="engine-hint">{{ t('Sólo HTTP en 127.0.0.1, localhost o [::1]. Por ejemplo, http://127.0.0.1:8188.') }}</p><div class="action-row"><button type="submit" class="secondary-button" :disabled="!connected || saving || probing">{{ t('Guardar dirección') }}</button><button type="button" class="primary-button" :disabled="!connected || !settings.engineUrl || engineDirty || saving || probing || engine?.status === 'checking'" @click="checkEngine">{{ probing || engine?.status === 'checking' ? t('Comprobando…') : t('Comprobar conexión') }}</button><button v-if="settings.engineUrl" type="button" class="text-button" :disabled="!connected || saving || probing" @click="saveEngine(true)">{{ t('Retirar conexión') }}</button></div></form><section aria-live="polite"><h3>{{ status }}</h3><p>{{ t(engine?.message || '') }}</p><template v-if="engine?.status === 'ready'"><p>{{ engine.nodeCount }} {{ t('tipos de nodo · Versión:') }} {{ engine.version || t('No informada') }}</p><p>{{ t('Dispositivos del motor:') }} {{ engine.devices.join(', ') || t('No informados') }}</p><details><summary>{{ t('Modelos declarados por ComfyUI (') }}{{ engine.models.length }})</summary><ul><li v-for="model in engine.models" :key="model">{{ model }}</li></ul><p v-if="!engine.models.length">{{ t('No se declararon modelos en los cargadores consultados.') }}</p></details></template><p v-if="engine?.checkedAt" class="small-note">{{ t('Última comprobación:') }} {{ date(engine.checkedAt) }}{{ t('. No es una monitorización continua.') }}</p></section></details>
-          <details class="settings-card advanced-connection"><summary>{{ t('Avanzado · Vincular la instalación para crear') }}</summary><p>{{ t('Kobocraft reutiliza el Python y el motor que ya tienes. Durante la preparación abrirá un proceso local con carpetas propias; no actualizará la instalación ni ejecutará sus nodos personalizados.') }}</p><form @submit.prevent="saveBinding"><label for="binding-directory">{{ t('Carpeta de ComfyUI (contiene main.py)') }}</label><input id="binding-directory" v-model="bindingDirectory" type="text" class="text-input" maxlength="1000" @input="bindingDirty = true"><label for="binding-python">{{ t('Python existente del motor') }}</label><input id="binding-python" v-model="bindingPython" type="text" class="text-input" maxlength="1000" @input="bindingDirty = true"><button class="secondary-button" :disabled="!connected || operationBusy || !bindingDirectory.trim() || !bindingPython.trim()">{{ t('Vincular esta instalación') }}</button></form><p v-if="settings.engineBinding">{{ t('Instalación vinculada. Ya puedes revisar la preparación desde Crear.') }}</p></details>
+          <template v-if="sessionRole === 'owner'">
+            <section class="setup-card real-setup"><div><h2>{{ t('Preparar mi equipo') }}</h2><p>{{ t('Kobocraft puede encontrar una instalación existente y preparar lo necesario para crear, sin pedirte rutas de Python.') }}</p></div><button class="primary-button" :disabled="!connected || operationBusy" @click="openSetup">{{ t('Revisar mi equipo') }}</button></section>
+            <details class="settings-card advanced-connection"><summary>{{ t('Avanzado · Usar una instalación existente de ComfyUI') }}</summary><p>{{ t('Comprobación técnica local. Guarda la dirección y consulta capacidades sin modificar su instalación. No es la incorporación final para principiantes.') }}</p><form @submit.prevent="saveEngine()"><label for="engine-address">{{ t('Dirección local de ComfyUI') }}</label><input id="engine-address" v-model="engineAddress" type="text" class="text-input" maxlength="200" inputmode="url" :disabled="!connected || probing || saving" aria-describedby="engine-hint" @input="engineDirty = true"><p id="engine-hint">{{ t('Sólo HTTP en 127.0.0.1, localhost o [::1]. Por ejemplo, http://127.0.0.1:8188.') }}</p><div class="action-row"><button type="submit" class="secondary-button" :disabled="!connected || saving || probing">{{ t('Guardar dirección') }}</button><button type="button" class="primary-button" :disabled="!connected || !settings.engineUrl || engineDirty || saving || probing || engine?.status === 'checking'" @click="checkEngine">{{ probing || engine?.status === 'checking' ? t('Comprobando…') : t('Comprobar conexión') }}</button><button v-if="settings.engineUrl" type="button" class="text-button" :disabled="!connected || saving || probing" @click="saveEngine(true)">{{ t('Retirar conexión') }}</button></div></form><section aria-live="polite"><h3>{{ status }}</h3><p>{{ t(engine?.message || '') }}</p><template v-if="engine?.status === 'ready'"><p>{{ engine.nodeCount }} {{ t('tipos de nodo · Versión:') }} {{ engine.version || t('No informada') }}</p><p>{{ t('Dispositivos del motor:') }} {{ engine.devices.join(', ') || t('No informados') }}</p><details><summary>{{ t('Modelos declarados por ComfyUI (') }}{{ engine.models.length }})</summary><ul><li v-for="model in engine.models" :key="model">{{ model }}</li></ul><p v-if="!engine.models.length">{{ t('No se declararon modelos en los cargadores consultados.') }}</p></details></template><p v-if="engine?.checkedAt" class="small-note">{{ t('Última comprobación:') }} {{ date(engine.checkedAt) }}{{ t('. No es una monitorización continua.') }}</p></section></details>
+            <details class="settings-card advanced-connection"><summary>{{ t('Avanzado · Vincular la instalación para crear') }}</summary><p>{{ t('Kobocraft reutiliza el Python y el motor que ya tienes. Durante la preparación abrirá un proceso local con carpetas propias; no actualizará la instalación ni ejecutará sus nodos personalizados.') }}</p><form @submit.prevent="saveBinding"><label for="binding-directory">{{ t('Carpeta de ComfyUI (contiene main.py)') }}</label><input id="binding-directory" v-model="bindingDirectory" type="text" class="text-input" maxlength="1000" @input="bindingDirty = true"><label for="binding-python">{{ t('Python existente del motor') }}</label><input id="binding-python" v-model="bindingPython" type="text" class="text-input" maxlength="1000" @input="bindingDirty = true"><button class="secondary-button" :disabled="!connected || operationBusy || !bindingDirectory.trim() || !bindingPython.trim()">{{ t('Vincular esta instalación') }}</button></form><p v-if="settings.engineBinding">{{ t('Instalación vinculada. Ya puedes revisar la preparación desde Crear.') }}</p></details>
+          </template>
         </template>
         <template v-else>
           <div class="page-heading"><div><h1 tabindex="-1">{{ t('Ajustes') }}</h1><p>{{ t('Tu espacio, a tu manera.') }}</p></div></div>
           <section class="settings-card" aria-labelledby="language-title"><h2 id="language-title">{{ t('Idioma') }}</h2><p>{{ t('Elige el idioma de Kobocraft. Se comparte entre navegador y escritorio.') }}</p><div class="language-options" role="group" :aria-label="t('Idioma')"><button v-for="option in ([{ value: 'es', label: 'Español' }, { value: 'en', label: 'English' }] as const)" :key="option.value" :lang="option.value" :class="{ selected: settings.locale === option.value }" :aria-pressed="settings.locale === option.value" :disabled="saving" @click="changeLanguage(option.value)">{{ option.label }}<Check v-if="settings.locale === option.value" :size="16" aria-hidden="true"/></button></div></section>
-          <section class="settings-card"><h2>{{ t('Apariencia') }}</h2><p>{{ t('La preferencia se comparte entre navegador y escritorio conectados al mismo servicio.') }}</p><div class="theme-options"><button v-for="option in (['system', 'light', 'dark'] as const)" :key="option" :class="{ selected: settings.theme === option }" :aria-pressed="settings.theme === option" :disabled="saving" @click="changeTheme(option)"><Monitor v-if="option === 'system'" :size="23"/><Sun v-else-if="option === 'light'" :size="23"/><Moon v-else :size="23"/><strong>{{ { system: t('Sistema'), light: t('Claro'), dark: t('Oscuro') }[option] }}</strong><Check v-if="settings.theme === option" :size="14"/></button></div><p class="small-note">{{ connected ? t('Guardada en SQLite por el servicio local.') : t('Sin servicio: puedes usar una apariencia temporal.') }}</p></section>
-          <section class="settings-card"><h2><Wifi :size="19"/>{{ t('Red local') }}</h2><p>{{ t('Compartir con otro dispositivo está pendiente del incremento 3B. Este servicio escucha sólo en loopback.') }}</p><label class="pending-toggle"><input type="checkbox" disabled>{{ t('Compartir en mi red local · pendiente') }}</label></section>
+          <section class="settings-card"><h2>{{ t('Apariencia') }}</h2><p>{{ t('La preferencia se comparte entre navegador y escritorio conectados al mismo servicio.') }}</p><div class="theme-options"><button v-for="option in (['system', 'light', 'dark'] as const)" :key="option" :class="{ selected: settings.theme === option }" :aria-pressed="settings.theme === option" :disabled="saving" @click="changeTheme(option)"><Monitor v-if="option === 'system'" :size="23"/><Sun v-else-if="option === 'light'" :size="23"/><Moon v-else :size="23"/><strong>{{ { system: t('Sistema'), light: t('Claro'), dark: t('Oscuro') }[option] }}</strong><Check v-if="settings.theme === option" :size="14"/></button></div><p class="small-note">{{ sessionRole === 'lan' ? t('Aplicada en este dispositivo.') : connected ? t('Guardada en SQLite por el servicio local.') : t('Sin servicio: puedes usar una apariencia temporal.') }}</p></section>
+          <LanSettings v-if="sessionRole === 'owner'" :state="lanState" :busy="operationBusy" :connected="connected" @enable="enableLan" @disable="disableLan" @refresh-code="refreshLanCode" @decide="decideLan" @revoke="revokeLanDevice"/>
+          <section v-else class="settings-card"><h2><Wifi :size="19"/>{{ t('Red local') }}</h2><p>{{ t('Estás conectado al equipo principal') }} (<strong>{{ hostName || 'Kobocraft PC' }}</strong>) {{ t('como') }} <strong>{{ deviceLabel || t('Dispositivo en red local') }}</strong>.</p><button type="button" class="secondary-button" @click="logoutLan">{{ t('Desconectar este dispositivo') }}</button></section>
           <section class="settings-card"><h2>{{ t('Tu espacio creativo') }}</h2><p>{{ t('Incluye imagen y video local con perfiles revisados. Instalación de motores, imagen a video y edición siguen pendientes.') }}</p></section>
         </template>
       </main>
-      <footer class="prototype-bar"><span><ShieldCheck :size="14"/>{{ connected ? t('Servicio autorizado · sólo este equipo') : t('Sin conexión al servicio') }}</span><span>{{ t('Kobocraft 0.10 · Creación local') }}</span></footer>
+      <footer class="prototype-bar"><span><ShieldCheck :size="14"/>{{ sessionRole === 'lan' ? `${t('Conectado en red local ·')} ${hostName || 'PC'}` : connected ? (lanState?.enabled ? t('Servicio autorizado · red local activa') : t('Servicio autorizado · sólo este equipo')) : t('Sin conexión al servicio') }}</span><span>{{ t('Kobocraft 0.10 · Creación local') }}</span></footer>
     </div>
-    <SetupWizard v-if="setupOpen" :state="setupState" :managed="managed" :preparation="creation?.preparation" :hardware="hardware" :catalog="catalog" :connected="connected" :busy="operationBusy || managedBusy" :error="error" @select="chooseSetupModel" @close="setupOpen = false" @refresh="refresh" @scan="scanSetup" @prepare="prepareSetup"/>
+    <div v-if="lanModalOpen && sessionRole === 'owner'" class="modal-backdrop" @click.self="lanModalOpen = false">
+      <LanSettings modal :state="lanState" :busy="operationBusy" :connected="connected" @close="lanModalOpen = false" @enable="enableLan" @disable="disableLan" @refresh-code="refreshLanCode" @decide="decideLan" @revoke="revokeLanDevice"/>
+    </div>
+    <SetupWizard v-if="setupOpen && sessionRole === 'owner'" :state="setupState" :managed="managed" :preparation="creation?.preparation" :hardware="hardware" :catalog="catalog" :connected="connected" :busy="operationBusy || managedBusy" :error="error" @select="chooseSetupModel" @close="setupOpen = false" @refresh="refresh" @scan="scanSetup" @prepare="prepareSetup"/>
     <div class="mobile-dock"><nav class="mobile-nav" :aria-label="t('Navegación móvil')"><button v-for="item in navigation" :key="item.id" :class="{ active: view === item.id }" :aria-label="item.label" :aria-current="view === item.id ? 'page' : undefined" @click="navigate(item.id)"><component :is="item.icon" :size="21"/><span>{{ item.label }}</span></button></nav></div>
   </div>
 </template>

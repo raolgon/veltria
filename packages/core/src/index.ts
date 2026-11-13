@@ -8,3 +8,5 @@ export * from './image-profile'
 export * from './localization'
 export * from './video-profile'
 export * from './model-catalog'
+export * from './qr'
+
