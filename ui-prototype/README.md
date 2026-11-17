@@ -1,16 +1,13 @@
-# Prototipo visual de Veltria
+# Prototipo visual (histórico)
 
-Abrir `veltria.html` para revisar la referencia Obsidian. [Alcance](../UI-PREVIEW.md), [diseño vigente](../DESIGN.md) y [aplicación real](../README.md).
+`veltria.html` conserva el prototipo conceptual inicial de la interfaz Obsidian. Para la aplicación real de **Kobocraft** (`apps/` y `packages/`), ver [README.md](../README.md) y [DESIGN.md](../DESIGN.md).
 
-Fuente en `src/`: Vue/TypeScript, CSS e ilustración propia. Hardware, perfiles, progreso y preparación son escenarios de diseño. No hay motor, servicio ni inferencia; no copiar sus temporizadores como lógica de producto.
+Fuente en `src/`: Vue/TypeScript, CSS e ilustración de muestra. Hardware, perfiles, progreso y preparación en esta carpeta son escenarios estáticos de diseño; no hay motor, servicio ni inferencia.
 
-El paquete independiente declara `dev`, `typecheck` y `build` en `package.json`. Para trabajar específicamente en esta referencia, desde esta carpeta:
+Para construir o revisar esta referencia de forma aislada:
 
 ```bash
 bun install
 bun run dev
-# Compilar el HTML autocontenido:
 bun run build
 ```
-
-El build comprueba tipos, ejecuta Vite y `standalone.mjs`. No sustituye las comprobaciones del workspace de producción. No distribuir dependencias de desarrollo con el HTML ni modificar el producto por interpretar datos de ejemplo como requisitos.

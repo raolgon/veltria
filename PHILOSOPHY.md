@@ -1,10 +1,10 @@
-# Veltria — nosotros hacemos el trabajo pesado
+# Kobocraft — nosotros hacemos el trabajo pesado
 
-**La persona decide qué quiere crear. Veltria prepara lo necesario para hacerlo en su equipo.**
+**La persona decide qué quiere crear. Kobocraft prepara lo necesario para hacerlo en su equipo.**
 
 ## Empezar por la intención
 
-Antes de la primera creación, la pantalla principal prepara el equipo: Veltria detecta recursos y propone el conjunto modelo, componentes, receta y ajustes. El editor permanece oculto hasta contar con un modelo preparado. Después, crear una imagen comienza con una descripción y elecciones comprensibles. Los nombres técnicos y los controles avanzados se pueden consultar sin convertirlos en requisitos del recorrido sencillo.
+Antes de la primera creación, la pantalla principal prepara el equipo: Kobocraft detecta recursos y propone el conjunto modelo, componentes, receta y ajustes. El editor permanece oculto hasta contar con un modelo preparado. Después, crear una imagen comienza con una descripción y elecciones comprensibles. Los nombres técnicos y los controles avanzados se pueden consultar sin convertirlos en requisitos del recorrido sencillo.
 
 La recomendación ayuda a elegir según el equipo. No decide qué debe imaginar la persona ni transforma su descripción de forma oculta. No necesita un LLM adicional.
 
@@ -16,7 +16,7 @@ La acción **Preparar mi equipo** muestra antes descarga pendiente, espacio fina
 
 Mostrar fases y progreso medible. Si no existe un denominador fiable, indicar actividad sin inventar porcentajes. Preparar no envía automáticamente una generación. Al terminar se habilita **Crear imagen**, conservando descripción y ajustes.
 
-Este recorrido es el objetivo de producto. La instalación administrada está implementada en desarrollo; su aceptación exige pruebas reales por plataforma y usabilidad. Reutilizar un ComfyUI existente no basta para declarar la app lista para principiantes desde cero.
+Este recorrido es el objetivo de producto. La instalación administrada está implementada en desarrollo; su aceptación completa exige pruebas reales por plataforma y usabilidad. Reutilizar un ComfyUI existente no basta para declarar la app lista para principiantes desde cero.
 
 ## Modelos, adaptaciones y calidad
 
@@ -26,7 +26,7 @@ Presentar adaptaciones LoRA sólo con una base compatible y su intensidad visibl
 
 Dejar elegir resolución y esfuerzo dentro de la receta admitida. Explicar que más píxeles usan más memoria y más pasos no garantizan calidad. Recomendar un punto de partida sin presentar los valores superiores como certificados.
 
-## Recuperar dentro de Veltria
+## Recuperar dentro de Kobocraft
 
 Un fallo conserva la descripción, ajustes, archivos íntegros y progreso recuperable. Ofrecer una acción concreta para continuar, elegir otra ubicación o reducir recursos. No repetir una generación cuyo envío sea incierto; consultar su estado antes de reenviar.
 
@@ -34,7 +34,7 @@ No reparar una instalación externa alterando sus paquetes sin autorización esp
 
 ## Una experiencia local y coherente
 
-Navegador y Electron usan el mismo servicio y muestran el mismo plan, trabajos y biblioteca. Los resultados, modelos y cálculos permanecen en el equipo. La futura LAN seguirá usando ese host, con activación y emparejamiento explícitos; no es inferencia móvil ni sincronización cloud.
+Navegador, Electron y dispositivos vinculados en red local usan el mismo servicio y muestran el mismo plan, trabajos y biblioteca. Los resultados, modelos y cálculos permanecen en el equipo principal. La conexión LAN requiere activación y emparejamiento explícitos del propietario; no es inferencia móvil ni sincronización cloud.
 
 Obsidian, temas, idiomas, teclado y móvil deben facilitar completar la tarea. Los estados vacíos, errores y funciones pendientes son parte del producto. No usar temporizadores, imágenes de muestra o botones sin respaldo para aparentar preparación o resultados reales.
 

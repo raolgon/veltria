@@ -8,11 +8,11 @@ La búsqueda de ComfyUI es acotada y de sólo lectura: revisa ubicaciones habitu
 
 La propuesta distingue archivos localizados, entorno utilizable, motor comprobado y generación verificada. Si hay varias instalaciones, permite elegir. Presenta modelo/configuración, compatibilidad estimada, descarga restante, espacio con margen, ubicación, fuente, licencia y cambios. Una revisión concreta del plan requiere consentimiento antes de preparar.
 
-El servicio guarda el vínculo aceptado, descarga/verifica los componentes necesarios y abre un proceso propio de ComfyUI con rutas de modelos de Veltria. No modifica el entorno externo ni sus modelos. Cambios de instalación, ubicación, componentes o configuración invalidan la revisión anterior. La propuesta tiene vigencia limitada y se vuelve a comprobar antes de actuar.
+El servicio guarda el vínculo aceptado, descarga/verifica los componentes necesarios y abre un proceso propio de ComfyUI con rutas de modelos de Kobocraft. No modifica el entorno externo ni sus modelos. Cambios de instalación, ubicación, componentes o configuración invalidan la revisión anterior. La propuesta tiene vigencia limitada y se vuelve a comprobar antes de actuar.
 
 Pausar conserva el progreso recuperable; continuar verifica el plan y los archivos. Descargas muestran bytes y porcentaje real; instalación y comprobación muestran actividad y fase, sin porcentajes inventados. Preparar no genera: al terminar se abre Crear. Las descripciones y ajustes ya existentes se conservan; en el primer inicio se escriben después de configurar el modelo.
 
-El selector de carpeta es nativo en Electron. En navegador la ruta corresponde al equipo que ejecuta el servicio. Una instalación Windows no es un entorno Python Linux reutilizable desde WSL; para ella se usa Veltria Windows.
+El selector de carpeta es nativo en Electron. En navegador la ruta corresponde al equipo que ejecuta el servicio. Una instalación Windows no es un entorno Python Linux reutilizable desde WSL; para ella se usa Kobocraft en Windows.
 
 ## Recorrido desde cero
 

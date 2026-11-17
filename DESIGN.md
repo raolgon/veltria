@@ -1,12 +1,12 @@
-# Veltria — diseño Obsidian
+# Kobocraft — diseño Obsidian
 
-Identidad de la aplicación compartida Vue: grafito/ámbar en oscuro y marfil/cobre en claro, con opción sistema. La implementación vigente está en `apps/ui/src`; `ui-prototype` y las imágenes de `design` son referencias conceptuales, no evidencia de funciones o rendimiento.
+Identidad visual de la aplicación compartida Vue: grafito/ámbar en oscuro y marfil/cobre en claro, con opción sistema y logotipos adaptativos (`kobocraft-dark` y `kobocraft-light`). La implementación vigente está en `apps/ui/src`; `ui-prototype` y las imágenes de `design/` son referencias conceptuales, no evidencia de funciones o rendimiento.
 
 ## Composición
 
-Navegación: Crear, Modelos, Biblioteca, Mi equipo y Ajustes. En escritorio, menú lateral con recursos compactos, espacio de descripción/resultado e inspector de modelo y ajustes. Acción principal ámbar y detalles técnicos desplegables. En móvil, seguir [MOBILE-UI.md](MOBILE-UI.md).
+Navegación: Crear, Modelos, Biblioteca, Mi equipo y Ajustes. En escritorio, menú lateral con recursos compactos, espacio de descripción/resultado e inspector de modelo y ajustes. Acción principal ámbar, botón de limpiar lienzo cuando hay resultado o vista previa activa, y detalles técnicos desplegables. En móvil, seguir [MOBILE-UI.md](MOBILE-UI.md).
 
-El primer inicio prepara un modelo antes de mostrar el editor. Después, la persona empieza por la idea. Preparación resume recursos, descarga, espacio, ubicación y cambios antes de autorizar. No convertir cada dependencia en otra pantalla. Modelo, licencia, parámetros e incertidumbre permanecen consultables. Mantener descripciones y ajustes al navegar, preparar o recuperar errores.
+El primer inicio prepara un modelo antes de mostrar el editor (`WelcomeSetup.vue`). Después, la persona empieza por la idea. Preparación resume recursos, descarga, espacio, ubicación y cambios antes de autorizar. No convertir cada dependencia en otra pantalla. Modelo, licencia, parámetros e incertidumbre permanecen consultables. Mantener descripciones y ajustes al navegar, preparar o recuperar errores.
 
 La calidad ofrece elecciones sencillas y campos manuales para quien los necesite, mostrando los valores reales. Compatibilidad, disponibilidad de pesos y ejecución comprobada no son el mismo estado. Un ejemplo visual se identifica como ejemplo; la ilustración de bienvenida no se presenta como una creación del usuario.
 
@@ -14,7 +14,7 @@ Video sigue identificado como experimental. Las funciones futuras no tienen cont
 
 ## Tokens y temas
 
-Los tokens semánticos actuales viven en `apps/ui/src/style.css`, con ajustes de composición en `app.css` y `mobile.css`. No mantener una segunda paleta divergente en la documentación.
+Los tokens semánticos actuales viven en `apps/ui/src/style.css`, con ajustes de composición en `app.css` y `mobile.css`.
 
 | Token | Oscuro | Claro |
 | --- | --- | --- |
@@ -26,13 +26,13 @@ Los tokens semánticos actuales viven en `apps/ui/src/style.css`, con ajustes de
 | `--line` | `#36332f` | `#ded7cd` |
 | `--accent-text` | `#f4b55e` | `#8c4e12` |
 
-Una estructura de componentes para ambos temas. Guardar preferencia en el servicio/SQLite; caché local sólo de presentación. Aplicar sin reiniciar ni perder entradas. Sistema sigue `prefers-color-scheme`; Electron refleja su tema nativo. Los colores de las imágenes generadas no se alteran por cambiar de tema.
+Una estructura de componentes para ambos temas. Guardar preferencia en el servicio/SQLite; caché local sólo de presentación. Aplicar sin reiniciar ni perder entradas. Sistema sigue `prefers-color-scheme`; Electron refleja su tema e icono nativo. Los colores de las imágenes generadas no se alteran por cambiar de tema.
 
 ## Interacción y contenido
 
-La bienvenida inicial adopta la propuesta 3 elegida por el usuario: pantalla completa sin editor detrás, hardware, recomendación principal, alternativa visible y acceso a más modelos. El plan se revisa en la misma página. Sin vínculo y modelo preparado no se muestra la navegación del estudio. La implementación y los estados se describen en [el brief de inicio](design/welcome-brief.md).
+La bienvenida inicial (`apps/ui/src/WelcomeSetup.vue`) ocupa la pantalla completa sin editor detrás: muestra hardware detectado, recomendación principal, alternativa visible y acceso a más modelos. El plan se revisa en la misma página. Sin vínculo y modelo preparado no se muestra la navegación del estudio. Cuando un dispositivo entra por red local sin sesión autorizada, se presenta `LanPairScreen.vue` para solicitar vinculación al equipo principal.
 
-Español e inglés mediante el catálogo compartido, con contenido del usuario literal. Iconos y recursos incluidos localmente. Mensajes de error con siguiente acción; datos desconocidos como desconocidos. Éxito/aviso/error incluyen texto o icono además del color.
+Español e inglés mediante el catálogo compartido, con contenido del usuario literal. Iconos, logotipos y generador QR incluidos localmente. Mensajes de error con siguiente acción; datos desconocidos como desconocidos. Éxito/aviso/error incluyen texto o icono además del color.
 
 Controles de teclado y foco visible, etiquetas asociadas, estados de carga/vacío/fallo/deshabilitado, contraste y desplazamiento de diálogos. Sin reducir texto para encajar móvil ni desactivar zoom. Transiciones discretas y respeto a movimiento reducido. No añadir un LLM por copiar un botón conceptual de mejorar descripción.
 

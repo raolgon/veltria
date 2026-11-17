@@ -1,6 +1,6 @@
 # Hito 4 · recomendaciones verificables y recuperación guiada
 
-Revisión del 10 de noviembre de 2026, desarrollo 0.10.0. **Estado: parcial.** Comparación documental y de código; no constituye una nueva prueba GPU ni certifica equipos adicionales.
+Revisión del 17 de noviembre de 2026, desarrollo 0.10.0. **Estado: parcial.** Comparación documental y de código; no constituye una nueva prueba GPU ni certifica equipos adicionales.
 
 El alcance original es «recomendaciones verificables y recuperación guiada» (arquitectura anterior a la consolidación, commit `96828c1^`). Los criterios siguientes consolidan ese alcance con [PHILOSOPHY.md](../PHILOSOPHY.md), los límites de [modelos](models.md) y [calidad](image-quality.md). No incorporan un LLM, entrenamiento ni soporte de modelos arbitrarios.
 
@@ -41,4 +41,4 @@ El alcance original es «recomendaciones verificables y recuperación guiada» (
 - Cambiar modelo, formato o configuración revalida límites y evidencia; los datos desconocidos no aparecen como comprobados.
 - Las pruebas incluyen recursos mínimos, poca memoria disponible, hardware desconocido, SDXL fuera de mínimos, modelos ya preparados y recuperación tras recargar; los casos GPU reales requieren autorización concreta.
 
-Los pendientes de Linux nativo, otros equipos/condiciones de almacenamiento y usabilidad del hito 3 siguen abiertos en [estado](status.md). El recorrido completo y la recuperación abrupta ya pasaron en WSL y Windows nativo con entorno/datos separados; eso no certifica una VM o un SO limpio. LAN y video/audio conservan sus hitos independientes.
+Los pendientes de Linux nativo, otros equipos/condiciones de almacenamiento y usabilidad del hito 3, así como la prueba física del hito 3B (LAN), siguen abiertos en [estado](status.md). El recorrido administrado completo y la recuperación abrupta ya pasaron en WSL y Windows nativo con entorno/datos separados; eso no certifica una VM o un SO limpio. Video y audio conservan su hito independiente.

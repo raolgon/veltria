@@ -11,7 +11,7 @@ El formato propone dimensiones cuadradas, horizontales o verticales. Los valores
 
 El esfuerzo ofrece 12 pasos, los pasos de la configuración seleccionada y 30 pasos. Manualmente: 1–60 pasos y CFG 1–15. Se mantiene Euler/normal, una imagen por trabajo y PNG sin pérdida. No incluye refiner ni escalado posterior.
 
-Estos son límites de la receta admitida por Veltria, no límites universales del modelo ni garantía de ejecución. Superar el tamaño inicial muestra un aviso de memoria y permite intentarlo dentro de esos límites. Más píxeles requieren más memoria; más pasos tardan más y no siempre mejoran el resultado. SD 1.5 a tamaños grandes también puede alterar la composición.
+Estos son límites de la receta admitida por Kobocraft, no límites universales del modelo ni garantía de ejecución. Superar el tamaño inicial muestra un aviso de memoria y permite intentarlo dentro de esos límites. Más píxeles requieren más memoria; más pasos tardan más y no siempre mejoran el resultado. SD 1.5 a tamaños grandes también puede alterar la composición.
 
 ## Persistencia y comprobación
 

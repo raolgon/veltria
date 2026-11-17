@@ -1,39 +1,33 @@
-# Red local — requisito pendiente
+# Red local (LAN)
 
-Objetivo: controlar el equipo principal desde teléfono, tableta u otra computadora de la misma LAN, incluso sin Internet cuando el perfil completo esté preparado. **No está implementado:** el servicio actual escucha sólo en loopback, sin emparejamiento ni reglas de firewall abiertas.
+Permite usar Kobocraft desde un teléfono, tableta u otra computadora conectada a la misma red privada, ejecutando los modelos y guardando los resultados en el equipo principal.
 
-## Recorrido objetivo
+## Cómo funciona
 
-1. Activar Compartir en mi red local en el host y elegir una interfaz/dirección concreta.
-2. Mostrar dirección real y QR local con código/secreto efímero, con alternativa manual.
-3. El segundo dispositivo solicita emparejamiento; el propietario aprueba alcance y permisos.
-4. Mostrar qué equipo ejecuta, progreso, biblioteca autorizada y desconexiones reales.
-5. Permitir revocar cada dispositivo o desactivar compartir, conservando el uso local.
+1. En el equipo principal (`owner`), abrir **Ajustes → Red local (LAN)**, elegir una interfaz IPv4 privada activa (`10.x.x.x`, `172.16–31.x.x` o `192.168.x.x`) y activar el acceso.
+2. El servicio abre un servidor HTTP secundario exclusivo en esa dirección y genera un código de 6 dígitos y un enlace `#pair=<token>` con vigencia de 10 minutos, junto a un código QR en SVG generado localmente (`packages/core/src/qr.ts`).
+3. El dispositivo secundario abre la dirección o el QR, escribe su nombre y envía la solicitud de vinculación (`POST /api/v1/lan/pair`). El fragmento `#pair=` se limpia de la URL.
+4. El propietario aprueba o rechaza la solicitud en el equipo principal (`POST /api/v1/lan/decision`). Hasta aprobarla, el dispositivo remoto permanece en espera y no recibe sesión.
+5. Al aprobarse, el dispositivo reclama su cookie de sesión con rol `lan` y token CSRF (`POST /api/v1/lan/pair/:id`) y accede a la interfaz compartida.
+6. El propietario puede regenerar el código, revocar dispositivos individuales o desactivar la red local en cualquier momento, cerrando al instante las sesiones y conexiones SSE remotas sin afectar la sesión local.
 
-No inventar IP/QR antes de activar, usar localhost como dirección del teléfono ni depender de un proveedor de QR. Redes de invitados/VPN pueden impedir comunicación; no pedir abrir puertos del router por defecto.
+## Permisos y seguridad
 
-## Responsabilidades y permisos
+- El servidor principal sigue escuchando únicamente en `127.0.0.1`; ComfyUI permanece en loopback.
+- La validación de `Host` exige que las peticiones por el listener LAN coincidan exactamente con el origen `http://<ip-privada>:<puerto>` activo.
+- Límite de 10 intentos fallidos de código por minuto y máximo de 12 solicitudes pendientes simultáneas. Comparación de secretos en tiempo constante (`timingSafeEqual`).
+- Las sesiones con rol `lan` pueden consultar estado, recursos, catálogo, trabajos, artefactos y eventos SSE, seleccionar modelos preparados (`POST /api/v1/catalog/select`), crear, cancelar o reconciliar trabajos de imagen/video y cerrar su propia sesión (`POST /api/v1/lan/logout`).
+- Las sesiones `lan` tienen bloqueados (`403 FORBIDDEN`) los cambios de ajustes globales, configuración o preparación de motores/modelos, descargas o borrado de archivos del catálogo, administración de la propia LAN y control de apagado del servicio.
 
-Reutilizar UI, contratos, dominio, cola, SQLite y motor del host. El cliente no instala ComfyUI ni ejecuta inferencia. Más pantallas no suman memoria o GPU. Inicialmente es uso entre dispositivos del mismo propietario, no bibliotecas multiusuario independientes.
+## Código y pruebas
 
-Añadir un transporte LAN al mismo servicio con listener explícito y permisos limitados; conservar el control local separado. No reemplazar globalmente `127.0.0.1` por `0.0.0.0`. ComfyUI permanece en loopback. Cambios de red/interfaz deben revalidarse, no ampliar el alcance automáticamente.
+- Servicio y controlador: `apps/local-service/src/lan.ts` y rutas `/api/v1/lan/*` en `apps/local-service/src/server.ts`.
+- Contratos y generador QR: `packages/contracts/src/lan.ts` y `packages/core/src/qr.ts`.
+- Interfaz: `apps/ui/src/LanSettings.vue` (panel del propietario en Ajustes) y `apps/ui/src/LanPairScreen.vue` (pantalla de vinculación en el cliente remoto).
+- Pruebas automatizadas: `tests/lan.bun.ts` verifica validación de IPv4 privadas, generación QR, bloqueo sin sesión, flujo de solicitud/aprobación/reclamación, permisos permitidos y denegados para el rol `lan`, y revocación inmediata de dispositivos y SSE.
 
-Emparejar con secreto de un uso/vida corta y límites de intentos; eliminarlo de URL/historial. Sesiones por dispositivo con expiración y revocación. Validar Host/origen, CSRF, SSE y artefactos; no confiar en IP/cabeceras como identidad ni registrar secretos.
+## Límites y validación pendiente
 
-Permitir crear/cancelar trabajos propios y acceder sólo a la biblioteca autorizada. No conceder administración del host, instalación de código, cambios de ubicaciones, borrado global ni acceso a credenciales de proveedores. Preparaciones nuevas requieren decisión del propietario local.
-
-## Transporte, continuidad y offline
-
-Decidir y probar transporte antes de implementar: HTTP privado exige explicar que no cifra el tráfico; HTTPS requiere confianza de certificados sin pedir omitir alertas como recorrido normal. No asumir capacidades de contexto seguro sobre una IP privada HTTP; ofrecer carga de archivos y códigos manuales sin exigir PWA, cámara o portapapeles.
-
-UI/API del mismo origen LAN, recursos incluidos y autenticación de todas las operaciones. No exponer el host a Internet, añadir túneles/UPnP ni desactivar firewall. Cualquier regla necesaria se limita al puerto/interfaz/red privada y forma parte del plan autorizado.
-
-Al reconectar, consultar IDs y estado persistente sin reenviar generación. Cerrar pestaña no cancela trabajos; dormir/apagar el host no implica que siguieron ejecutándose. Desactivar LAN revoca sesiones/listener remotos y conserva trabajos aceptados salvo cancelación explícita.
-
-Offline requiere pesos, entorno y dependencias ya preparados. Emparejamiento/QR y recursos no deben depender de cuentas, DNS o servicios externos. Archivos de referencia son uploads validados, no rutas del dispositivo remoto interpretadas por el host.
-
-## Criterios antes de habilitar
-
-Segundo dispositivo real, dos clientes simultáneos, rechazo sin sesión, restricciones administrativas, expiración/revocación, cambio de red, SSE/desconexión sin duplicados y recorrido con Internet desconectado manteniendo LAN. Una segunda pestaña local no acredita esto.
-
-Es el incremento 3B; no cierra la instalación administrada del hito 3 ni se añade al trabajo actual automáticamente. [Estado](docs/status.md), [arquitectura](ARCHITECTURE.md), [próxima tarea](FIRST-TASK.md).
+- El transporte LAN usa HTTP directo en la red privada local; no cifra el tráfico ni debe exponerse a Internet o redes públicas.
+- Si el servicio se ejecuta dentro de WSL2, detecta la interfaz virtual y muestra una advertencia indicando iniciar Kobocraft directamente en Windows para conectar desde otros dispositivos físicos sin reenvío de puertos.
+- Falta documentar la validación manual desde un segundo dispositivo físico real (teléfono o tableta) en la misma Wi-Fi/LAN y con corte de Internet.

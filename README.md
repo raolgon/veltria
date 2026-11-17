@@ -1,17 +1,17 @@
-# Veltria
+# Kobocraft
 
-Aplicación local para crear imágenes sin tener que administrar manualmente modelos, carpetas o workflows. La persona decide qué crear; Veltria prepara lo necesario. Imagen primero, con video todavía experimental.
+Aplicación local para crear imágenes sin administrar manualmente modelos, carpetas o workflows. La persona decide qué crear; Kobocraft prepara lo necesario. Imagen primero, con video todavía experimental.
 
 **Versión de desarrollo: 0.10.0 · rama de trabajo: `development`.** Estado y pendientes en [docs/status.md](docs/status.md). La preparación reutiliza ComfyUI existente y ofrece una [instalación propia](docs/managed-setup.md) cuando falta un motor utilizable.
 
 ## Abrir en esta PC
 
-Proyecto: `C:\Users\rafao\Documents\ChatGPT\Veltria`. Cerrar otras versiones antes de abrirlo y conservar cada ejecutable con sus recursos.
+Proyecto: `C:\Users\rafao\Documents\ChatGPT\Veltria` (identificadores internos y rutas de código conservan el nombre histórico `veltria`). Cerrar otras versiones antes de abrirlo y conservar cada ejecutable con sus recursos.
 
 ```powershell
 Set-Location 'C:\Users\rafao\Documents\ChatGPT\Veltria'
 # Escritorio:
-.\release\0.10.0\win-unpacked\Veltria.exe
+.\release\0.10.0\win-unpacked\Kobocraft.exe
 # Navegador: abrir el enlace autorizado que imprime.
 .\build\browser\0.10.0\veltria-web.exe
 ```
@@ -20,7 +20,7 @@ Linux/WSL con pantalla:
 
 ```bash
 cd '/mnt/c/Users/rafao/Documents/ChatGPT/Veltria'
-./release/0.10.0/linux-unpacked/veltria
+./release/0.10.0/linux-unpacked/kobocraft
 ./build/browser/0.10.0/veltria-web
 ```
 
@@ -28,14 +28,15 @@ El enlace del navegador vence en 60 segundos y es de un solo uso. Ejecutar de nu
 
 ## Qué se puede hacer
 
-- Crear imágenes con SD 1.5, DreamShaper 8 y SDXL Base; elegir formato, tamaño, pasos y CFG.
+- Crear imágenes con SD 1.5, DreamShaper 8 y SDXL Base; elegir formato, tamaño, pasos y CFG, o limpiar el lienzo.
 - Buscar modelos y LoRA admitidos, explorar compatibles por popularidad, revisar recomendaciones y preparar sus componentes.
 - Descargar con progreso, pausa, reanudación cuando el origen la admite y verificación SHA-256; gestionar archivos completos y parciales.
-- Importar/exportar configuraciones JSON de Veltria, guardar PNG y consultar la biblioteca persistente.
-- Consultar recursos reales del equipo y usar español/inglés y temas claro/oscuro/sistema.
+- Compartir el estudio en red local (LAN) con código o QR local, aprobación en el equipo principal y revocación por dispositivo.
+- Importar/exportar configuraciones JSON, guardar PNG y consultar la biblioteca persistente.
+- Consultar recursos reales del equipo y usar español/inglés y temas claro/oscuro/sistema con logotipos adaptativos.
 - Revisar el flujo experimental de video H3. No hay una generación H3 real validada en esta PC.
 
-SDXL tiene pruebas GPU reales en Windows a 768 y 1024 px. Eso no certifica todas las resoluciones ni otros equipos. No hay un LLM adicional para seleccionar modelos o reescribir descripciones. LAN y audio siguen pendientes.
+SDXL tiene pruebas GPU reales en Windows a 768 y 1024 px. Eso no certifica todas las resoluciones ni otros equipos. No hay un LLM adicional para seleccionar modelos o reescribir descripciones. Audio sigue pendiente.
 
 ## Desarrollo
 
@@ -59,16 +60,15 @@ bun run start:desktop
 | --- | --- |
 | [PROJECT.md](PROJECT.md) | Decisiones de producto, alcance y reglas de trabajo. |
 | [PHILOSOPHY.md](PHILOSOPHY.md) | Experiencia para personas sin conocimientos técnicos. |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | Procesos, API, persistencia, seguridad y distribución. |
-| [DESIGN.md](DESIGN.md), [MOBILE-UI.md](MOBILE-UI.md) | Obsidian, temas y comportamiento responsive. |
-| [FIRST-TASK.md](FIRST-TASK.md) | Próximo incremento propuesto del hito 4 y aceptación pendiente del hito 3. |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Procesos, API, persistencia, seguridad, LAN y distribución. |
+| [DESIGN.md](DESIGN.md), [MOBILE-UI.md](MOBILE-UI.md) | Identidad Obsidian, temas y comportamiento responsive. |
+| [LOCAL-NETWORK.md](LOCAL-NETWORK.md) | Acceso en red local, emparejamiento QR, permisos y límites. |
+| [FIRST-TASK.md](FIRST-TASK.md) | Próximo incremento propuesto del hito 4 y validación pendiente. |
 | [Hito 4](docs/milestone-4.md) | Requisitos, implementación actual, faltantes y criterios de cierre. |
 | [Estado](docs/status.md), [validación](docs/validation.md) | Qué funciona, evidencia y pendientes por plataforma. |
-| [Preparación](docs/setup.md), [modelos](docs/models.md), [calidad](docs/image-quality.md) | Recorridos y límites actuales de imagen. |
+| [Preparación](docs/setup.md), [instalación propia](docs/managed-setup.md) | Recorrido de configuración, entorno administrado y recuperación. |
+| [Modelos](docs/models.md), [calidad](docs/image-quality.md) | Catálogo, LoRA, archivos y ajustes por imagen. |
 | [Video](docs/video.md), [recursos](docs/resources.md), [idiomas](docs/languages.md) | Funciones específicas y su alcance. |
-| [Laboratorio Linux](docs/linux-lab.md) | Entorno aislado de pruebas en `D:\Veltria\lab`. |
-| [Prueba Windows](docs/windows-lab.md) | Entorno y datos separados en D:, instalación propia y generación CUDA comprobadas. |
-| [Red local](LOCAL-NETWORK.md) | Requisito pendiente, no una función habilitada. |
-| [Prototipo](UI-PREVIEW.md) | Referencia de diseño conservada; no es la aplicación de producción. |
+| [Laboratorio Linux](docs/linux-lab.md), [prueba Windows](docs/windows-lab.md) | Entornos aislados de prueba en `D:\Veltria\lab`. |
 
 El historial de entregas se consulta en Git; estas guías describen el estado actual. Modelos, resultados y datos personales permanecen fuera del repositorio.
