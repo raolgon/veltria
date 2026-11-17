@@ -31,6 +31,66 @@ const VERSIONS: VersionSpec[] = [
   { version: 10, totalData: 274, ecPerBlock: 18, blocks: [68, 68, 69, 69], align: [6, 28, 50] }
 ]
 
+function maskBit(mask: number, r: number, c: number): boolean {
+  switch (mask) {
+    case 0: return (r + c) % 2 === 0
+    case 1: return r % 2 === 0
+    case 2: return c % 3 === 0
+    case 3: return (r + c) % 3 === 0
+    case 4: return (Math.floor(r / 2) + Math.floor(c / 3)) % 2 === 0
+    case 5: return ((r * c) % 2) + ((r * c) % 3) === 0
+    case 6: return (((r * c) % 2) + ((r * c) % 3)) % 2 === 0
+    default: return (((r + c) % 2) + ((r * c) % 3)) % 2 === 0
+  }
+}
+
+function formatBits(mask: number): number {
+  const data = (0b01 << 3) | mask // EC Level L (01) + 3-bit mask
+  let rem = data << 10
+  for (let i = 4; i >= 0; i--) if ((rem >> (i + 10)) & 1) rem ^= 0x537 << i
+  return ((data << 10) | rem) ^ 0x5412
+}
+
+function penaltyScore(grid: boolean[][]): number {
+  const n = grid.length
+  let score = 0
+  let dark = 0
+  for (let r = 0; r < n; r++) {
+    let runRow = 1, runCol = 1
+    for (let c = 0; c < n; c++) {
+      if (grid[r][c]) dark++
+      if (c > 0) {
+        if (grid[r][c] === grid[r][c - 1]) runRow++
+        else { if (runRow >= 5) score += runRow - 2; runRow = 1 }
+        if (grid[c][r] === grid[c - 1][r]) runCol++
+        else { if (runCol >= 5) score += runCol - 2; runCol = 1 }
+      }
+      if (r < n - 1 && c < n - 1) {
+        const v = grid[r][c]
+        if (v === grid[r][c + 1] && v === grid[r + 1][c] && v === grid[r + 1][c + 1]) score += 3
+      }
+    }
+    if (runRow >= 5) score += runRow - 2
+    if (runCol >= 5) score += runCol - 2
+  }
+  const hasFinderLike = (vals: boolean[]) => {
+    for (let i = 0; i <= vals.length - 11; i++) {
+      const p1 = vals[i] && !vals[i + 1] && vals[i + 2] && vals[i + 3] && vals[i + 4] && !vals[i + 5] && vals[i + 6] && !vals[i + 7] && !vals[i + 8] && !vals[i + 9] && !vals[i + 10]
+      const p2 = !vals[i] && !vals[i + 1] && !vals[i + 2] && !vals[i + 3] && vals[i + 4] && !vals[i + 5] && vals[i + 6] && vals[i + 7] && vals[i + 8] && !vals[i + 9] && vals[i + 10]
+      if (p1 || p2) score += 40
+    }
+  }
+  for (let r = 0; r < n; r++) {
+    hasFinderLike(grid[r])
+    const col: boolean[] = []
+    for (let c = 0; c < n; c++) col.push(grid[c][r])
+    hasFinderLike(col)
+  }
+  const pct = (dark * 100) / (n * n)
+  score += Math.floor(Math.abs(pct - 50) / 5) * 10
+  return score
+}
+
 export function encodeQrMatrix(text: string): boolean[][] {
   const bytes = Array.from(new TextEncoder().encode(text))
   const spec = VERSIONS.find(v => bytes.length + (v.version >= 10 ? 3 : 2) <= v.totalData)
@@ -60,31 +120,37 @@ export function encodeQrMatrix(text: string): boolean[][] {
   for (let i = 0; i < spec.ecPerBlock; i++) for (const b of ecBlocks) interleaved.push(b[i])
 
   const size = spec.version * 4 + 17
-  const modules: boolean[][] = Array.from({ length: size }, () => Array(size).fill(false))
+  const base: boolean[][] = Array.from({ length: size }, () => Array(size).fill(false))
   const isFunc: boolean[][] = Array.from({ length: size }, () => Array(size).fill(false))
-  const setFunc = (r: number, c: number, val: boolean) => { if (r >= 0 && r < size && c >= 0 && c < size) { modules[r][c] = val; isFunc[r][c] = true } }
+  const setFunc = (grid: boolean[][], r: number, c: number, val: boolean) => {
+    if (r >= 0 && r < size && c >= 0 && c < size) { grid[r][c] = val; isFunc[r][c] = true }
+  }
 
   const finder = (row: number, col: number) => {
     for (let dy = -1; dy <= 7; dy++) for (let dx = -1; dx <= 7; dx++) {
       const inBox = dy >= 0 && dy <= 6 && dx >= 0 && dx <= 6
       const dark = inBox && (dy === 0 || dy === 6 || dx === 0 || dx === 6 || (dy >= 2 && dy <= 4 && dx >= 2 && dx <= 4))
-      setFunc(row + dy, col + dx, dark)
+      setFunc(base, row + dy, col + dx, dark)
     }
   }
   finder(0, 0); finder(0, size - 7); finder(size - 7, 0)
-  for (let i = 8; i < size - 8; i++) { setFunc(6, i, i % 2 === 0); setFunc(i, 6, i % 2 === 0) }
   for (const r of spec.align) for (const c of spec.align) {
     if ((r === 6 && c === 6) || (r === 6 && c === size - 7) || (r === size - 7 && c === 6)) continue
-    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) setFunc(r + dy, c + dx, Math.max(Math.abs(dy), Math.abs(dx)) !== 1)
+    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) setFunc(base, r + dy, c + dx, Math.max(Math.abs(dy), Math.abs(dx)) !== 1)
   }
-  for (let i = 0; i < 8; i++) { setFunc(8, i, false); setFunc(i, 8, false); setFunc(8, size - 1 - i, false); setFunc(size - 1 - i, 8, false) }
-  setFunc(8, 8, false); setFunc(size - 8, 8, true)
+  for (let i = 8; i < size - 8; i++) { setFunc(base, 6, i, i % 2 === 0); setFunc(base, i, 6, i % 2 === 0) }
+  for (let i = 0; i <= 8; i++) {
+    if (i !== 6) { setFunc(base, 8, i, false); setFunc(base, i, 8, false) }
+    if (i < 8) setFunc(base, 8, size - 1 - i, false)
+    if (i < 7) setFunc(base, size - 1 - i, 8, false)
+  }
+  setFunc(base, size - 8, 8, true)
   if (spec.version >= 7) {
     let rem = spec.version; for (let i = 0; i < 12; i++) rem = (rem << 1) ^ ((rem >> 11) * 0x1f25)
     const vBits = (spec.version << 12) | rem
     for (let i = 0; i < 18; i++) {
       const bit = ((vBits >> i) & 1) === 1, a = size - 11 + (i % 3), b = Math.floor(i / 3)
-      setFunc(a, b, bit); setFunc(b, a, bit)
+      setFunc(base, a, b, bit); setFunc(base, b, a, bit)
     }
   }
 
@@ -96,23 +162,33 @@ export function encodeQrMatrix(text: string): boolean[][] {
       for (let j = 0; j < 2; j++) {
         const x = right - j
         if (!isFunc[y][x]) {
-          modules[y][x] = bitIdx < totalBits && ((interleaved[bitIdx >> 3] >> (7 - (bitIdx & 7))) & 1) === 1
+          base[y][x] = bitIdx < totalBits && ((interleaved[bitIdx >> 3] >> (7 - (bitIdx & 7))) & 1) === 1
           bitIdx++
         }
       }
     }
   }
 
-  // Mask 0 ((r + c) % 2 === 0) with format info for EC Level L (01) and Mask 000 -> format bits 0b111011111000100 (0x77c4)
-  for (let r = 0; r < size; r++) for (let c = 0; c < size; c++) if (!isFunc[r][c] && (r + c) % 2 === 0) modules[r][c] = !modules[r][c]
-  const fmt = 0x77c4
-  for (let i = 0; i <= 5; i++) setFunc(8, i, ((fmt >> i) & 1) === 1)
-  setFunc(8, 7, ((fmt >> 6) & 1) === 1); setFunc(8, 8, ((fmt >> 7) & 1) === 1); setFunc(7, 8, ((fmt >> 8) & 1) === 1)
-  for (let i = 9; i < 15; i++) setFunc(14 - i, 8, ((fmt >> i) & 1) === 1)
-  for (let i = 0; i < 8; i++) setFunc(size - 1 - i, 8, ((fmt >> i) & 1) === 1)
-  for (let i = 8; i < 15; i++) setFunc(8, size - 15 + i, ((fmt >> i) & 1) === 1)
-  setFunc(size - 8, 8, true)
-  return modules
+  let bestGrid = base
+  let bestScore = Infinity
+  for (let mask = 0; mask < 8; mask++) {
+    const candidate = base.map((row, r) => row.map((val, c) => (!isFunc[r][c] && maskBit(mask, r, c) ? !val : val)))
+    const fmt = formatBits(mask)
+    // Bit 14 (MSB) at (8, 0) / (size - 1, 8) down to bit 0 (LSB) at (0, 8) / (8, size - 1).
+    for (let i = 0; i <= 5; i++) setFunc(candidate, 8, i, ((fmt >> (14 - i)) & 1) === 1)
+    setFunc(candidate, 8, 7, ((fmt >> 8) & 1) === 1)
+    setFunc(candidate, 8, 8, ((fmt >> 7) & 1) === 1)
+    setFunc(candidate, 7, 8, ((fmt >> 6) & 1) === 1)
+    for (let i = 9; i < 15; i++) setFunc(candidate, 14 - i, 8, ((fmt >> (14 - i)) & 1) === 1)
+
+    for (let i = 0; i < 7; i++) setFunc(candidate, size - 1 - i, 8, ((fmt >> (14 - i)) & 1) === 1)
+    for (let i = 7; i < 15; i++) setFunc(candidate, 8, size - 15 + i, ((fmt >> (14 - i)) & 1) === 1)
+    setFunc(candidate, size - 8, 8, true)
+
+    const score = penaltyScore(candidate)
+    if (score < bestScore) { bestScore = score; bestGrid = candidate }
+  }
+  return bestGrid
 }
 
 export function qrSvgPath(text: string): { size: number; path: string } {

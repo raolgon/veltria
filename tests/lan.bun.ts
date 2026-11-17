@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createServer, secret } from '../apps/local-service/src/server'
 import { isPrivateIpv4 } from '../apps/local-service/src/lan'
-import { qrSvgPath } from '@veltria/core'
+import { encodeQrMatrix, qrSvgPath } from '@veltria/core'
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
@@ -16,7 +16,26 @@ assert(isPrivateIpv4('172.20.5.1') === true, '172.20.5.1 debe ser IPv4 privada')
 assert(isPrivateIpv4('172.32.0.1') === false, '172.32.0.1 no debe ser IPv4 privada')
 assert(isPrivateIpv4('8.8.8.8') === false, '8.8.8.8 no debe ser IPv4 privada')
 
-const qr = qrSvgPath('http://192.168.1.45:51234/#pair=' + 'a'.repeat(64))
+const samplePairUrl = 'http://192.168.1.45:51234/#pair=' + 'a'.repeat(64)
+const matrix = encodeQrMatrix(samplePairUrl)
+const n = matrix.length
+assert(n === 37, 'Una URL de vinculación de 98 bytes debe producir una matriz QR versión 5 (37x37)')
+for (let i = 8; i < n - 8; i++) {
+  assert(matrix[6][i] === (i % 2 === 0), `Patrón de sincronización horizontal inválido en columna ${i}`)
+  assert(matrix[i][6] === (i % 2 === 0), `Patrón de sincronización vertical inválido en fila ${i}`)
+}
+assert(matrix[n - 8][8] === true, 'El módulo oscuro fijo debe permanecer activo en (size - 8, 8)')
+const topLeftFormat = [
+  matrix[8][0], matrix[8][1], matrix[8][2], matrix[8][3], matrix[8][4], matrix[8][5], matrix[8][7], matrix[8][8],
+  matrix[7][8], matrix[5][8], matrix[4][8], matrix[3][8], matrix[2][8], matrix[1][8], matrix[0][8]
+]
+const splitFormat = [
+  matrix[n - 1][8], matrix[n - 2][8], matrix[n - 3][8], matrix[n - 4][8], matrix[n - 5][8], matrix[n - 6][8], matrix[n - 7][8],
+  matrix[8][n - 8], matrix[8][n - 7], matrix[8][n - 6], matrix[8][n - 5], matrix[8][n - 4], matrix[8][n - 3], matrix[8][n - 2], matrix[8][n - 1]
+]
+assert(topLeftFormat.every((bit, idx) => bit === splitFormat[idx]), 'Las dos copias de información de formato QR deben coincidir')
+
+const qr = qrSvgPath(samplePairUrl)
 assert(qr.size > 20 && qr.path.startsWith('M'), 'El generador QR debe producir un path SVG válido')
 
 // 2. Spin up server with loopback allowed as test LAN interface

@@ -207,9 +207,19 @@ function reviewPlan() { void operation(async () => { plan.value = await api.plan
 function prepareProfile() { void operation(async () => { if (!plan.value) return; await api.prepare(plan.value.revision); plan.value = null }) }
 function resumeProfile() { void operation(async () => { const current = await api.plan(); if (current.canPrepare && current.revision === creation.value?.preparation.revision) await api.prepare(current.revision); else plan.value = current }) }
 function pauseProfile() { void operation(async () => { await api.pause() }) }
+function createRequestId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID()
+  const raw = new Uint8Array(16)
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') crypto.getRandomValues(raw)
+  else for (let i = 0; i < 16; i++) raw[i] = Math.floor(Math.random() * 256)
+  raw[6] = (raw[6]! & 0x0f) | 0x40
+  raw[8] = (raw[8]! & 0x3f) | 0x80
+  const hex = Array.from(raw, b => b.toString(16).padStart(2, '0')).join('')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`
+}
 function generate() {
   void operation(async () => {
-    let requestId = crypto.randomUUID()
+    let requestId = createRequestId()
     try { const saved = JSON.parse(sessionStorage.getItem('veltria-pending-create') || 'null'); if (saved?.prompt === prompt.value.trim() && saved.format === format.value && JSON.stringify(saved.quality ?? null) === JSON.stringify(quality.value) && typeof saved.requestId === 'string') requestId = saved.requestId } catch {}
     const input = { requestId, prompt: prompt.value.trim(), format: format.value, ...(quality.value ? { quality: quality.value } : {}) }
     try { sessionStorage.setItem('veltria-pending-create', JSON.stringify(input)) } catch {}
@@ -221,7 +231,7 @@ function reviewVideoPlan() { void operation(async () => { videoPlan.value = awai
 function prepareVideo() { void operation(async () => { if (!videoPlan.value) return; await api.prepareVideo(videoPlan.value.revision); videoPlan.value = null }) }
 function pauseVideo() { void operation(async () => { await api.pauseVideo() }) }
 function generateVideo() { void operation(async () => {
-  let requestId = crypto.randomUUID()
+  let requestId = createRequestId()
   try { const saved = JSON.parse(sessionStorage.getItem('veltria-pending-video') || 'null'); if (saved?.prompt === videoPrompt.value.trim() && saved.preset === videoPreset.value && typeof saved.requestId === 'string') requestId = saved.requestId } catch {}
   const input = { requestId, prompt: videoPrompt.value.trim(), preset: videoPreset.value }
   try { sessionStorage.setItem('veltria-pending-video', JSON.stringify(input)) } catch {}

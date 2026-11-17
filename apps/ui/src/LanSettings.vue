@@ -135,15 +135,15 @@ async function copyAddress() {
         <div class="lan-qr-frame">
           <svg
             v-if="qrCode"
-            :viewBox="`-2 -2 ${qrCode.size + 4} ${qrCode.size + 4}`"
+            :viewBox="`-4 -4 ${qrCode.size + 8} ${qrCode.size + 8}`"
             width="260"
             height="260"
             class="lan-qr-svg"
             role="img"
             :aria-label="t('Código QR para conectar desde otro dispositivo')"
           >
-            <rect x="-2" y="-2" :width="qrCode.size + 4" :height="qrCode.size + 4" fill="#ffffff"/>
-            <path :d="qrCode.path" fill="#121316"/>
+            <rect x="-4" y="-4" :width="qrCode.size + 8" :height="qrCode.size + 8" fill="#ffffff"/>
+            <path :d="qrCode.path" fill="#000000"/>
           </svg>
           <div v-else class="lan-qr-placeholder">
             <QrCode :size="64"/>
