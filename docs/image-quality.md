@@ -22,4 +22,4 @@ Estos son límites de la receta admitida por Kobocraft, no límites universales 
 - Los valores inválidos impiden crear y muestran cómo corregirlos. Los controles se bloquean durante operaciones en curso.
 - La etiqueta comprobada exige coincidencia de dimensiones, pasos y CFG. Una prueba con valores modificados no certifica la configuración base.
 
-En Windows se comprobó SDXL a 768 × 768, 20 pasos/CFG 7, y a 1024 × 1024, 24 pasos/CFG 6,5. Las opciones de 1536 px y extremos de pasos/CFG no tienen una generación GPU certificada. Evidencia y repetición optativa en [validation.md](validation.md); comandos de apertura en [README](../README.md).
+En Windows se comprobó SDXL a 768 × 768, 20 pasos/CFG 7, y a 1024 × 1024, 24 pasos/CFG 6,5. Las opciones de 1536 px y extremos de pasos/CFG no tienen una generación GPU certificada. Evidencia y alcance en [validation.md](validation.md); comandos de apertura en [README](../README.md).

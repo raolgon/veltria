@@ -8,4 +8,4 @@ El cliente autorizado consulta `/api/v1/resources` cada tres segundos después d
 
 El servicio comparte muestras concurrentes, conserva caché durante 2,5 segundos y no muestrea sin clientes. La consulta NVIDIA tiene timeout y espera antes de reintentar tras fallar. RAM Linux usa `MemAvailable`; Windows informa su fuente del SO. No instala sensores ni herramientas.
 
-CPU/RAM/disco se consultan por separado. Otras GPU y sensores macOS siguen pendientes. Cálculo, caché, autorización, actualización, fallo/recuperación y pausa tienen pruebas; lecturas nativas Windows y GPU visible en el laboratorio se registran en [validation.md](validation.md).
+CPU/RAM/disco se consultan por separado. Otras GPU y sensores macOS siguen pendientes. Cálculo, caché, autorización, actualización, fallo/recuperación y pausa tienen pruebas; las lecturas nativas en Windows y la GPU visible en WSL se registran en [validation.md](validation.md).

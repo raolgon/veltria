@@ -6,5 +6,5 @@
     "resolveJsonModule": true, "esModuleInterop": true
   },
   "include": ["packages/**/*.ts", "apps/local-service/**/*.ts", "apps/desktop/**/*.ts", "scripts/**/*.ts", "tests/**/*.ts", "*.config.ts"],
-  "exclude": ["node_modules", "ui-prototype", "release"]
+  "exclude": ["node_modules", "release"]
 }

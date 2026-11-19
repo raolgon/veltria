@@ -1,10 +1,10 @@
 # Kobocraft — diseño Obsidian
 
-Identidad visual de la aplicación compartida Vue: grafito/ámbar en oscuro y marfil/cobre en claro, con opción sistema y logotipos adaptativos (`kobocraft-dark` y `kobocraft-light`). La implementación vigente está en `apps/ui/src`; `ui-prototype` y las imágenes de `design/` son referencias conceptuales, no evidencia de funciones o rendimiento.
+Identidad visual de la aplicación compartida Vue (`apps/ui/src`): grafito/ámbar en oscuro y marfil/cobre en claro, con opción sistema y logotipos adaptativos (`kobocraft-dark` y `kobocraft-light`).
 
 ## Composición
 
-Navegación: Crear, Modelos, Biblioteca, Mi equipo y Ajustes. En escritorio, menú lateral con recursos compactos, espacio de descripción/resultado e inspector de modelo y ajustes. Acción principal ámbar, botón de limpiar lienzo cuando hay resultado o vista previa activa, y detalles técnicos desplegables. En móvil, seguir [MOBILE-UI.md](MOBILE-UI.md).
+Navegación: Crear, Modelos, Biblioteca, Mi equipo y Ajustes. En escritorio, menú lateral con recursos compactos, espacio de descripción/resultado e inspector de modelo y ajustes. Acción principal ámbar, botón de limpiar lienzo cuando hay resultado o vista previa activa, guía de recuperación en fallos de creación y detalles técnicos desplegables. En móvil, seguir [MOBILE-UI.md](MOBILE-UI.md).
 
 El primer inicio prepara un modelo antes de mostrar el editor (`WelcomeSetup.vue`). Después, la persona empieza por la idea. Preparación resume recursos, descarga, espacio, ubicación y cambios antes de autorizar. No convertir cada dependencia en otra pantalla. Modelo, licencia, parámetros e incertidumbre permanecen consultables. Mantener descripciones y ajustes al navegar, preparar o recuperar errores.
 
@@ -34,7 +34,7 @@ La bienvenida inicial (`apps/ui/src/WelcomeSetup.vue`) ocupa la pantalla complet
 
 Español e inglés mediante el catálogo compartido, con contenido del usuario literal. Iconos, logotipos y generador QR incluidos localmente. Mensajes de error con siguiente acción; datos desconocidos como desconocidos. Éxito/aviso/error incluyen texto o icono además del color.
 
-Controles de teclado y foco visible, etiquetas asociadas, estados de carga/vacío/fallo/deshabilitado, contraste y desplazamiento de diálogos. Sin reducir texto para encajar móvil ni desactivar zoom. Transiciones discretas y respeto a movimiento reducido. No añadir un LLM por copiar un botón conceptual de mejorar descripción.
+Controles de teclado y foco visible, etiquetas asociadas, estados de carga/vacío/fallo/deshabilitado, contraste y desplazamiento de diálogos. Sin reducir texto para encajar móvil ni desactivar zoom. Transiciones discretas y respeto a movimiento reducido. No añadir un LLM para reescribir descripciones.
 
 ## Comprobación
 

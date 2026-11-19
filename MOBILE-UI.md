@@ -1,6 +1,6 @@
 # Interfaz móvil y tableta
 
-La aplicación de `apps/ui` comparte componentes y servicio con escritorio. Sus reglas responsive están en `style.css`, `app.css` y `mobile.css`; el prototipo permanece como referencia visual.
+La aplicación de `apps/ui` comparte componentes y servicio con escritorio. Sus reglas responsive están en `apps/ui/src/style.css`, `app.css` y `mobile.css`.
 
 ## Comportamiento
 
@@ -14,6 +14,6 @@ La aplicación de `apps/ui` comparte componentes y servicio con escritorio. Sus 
 
 ## Cobertura
 
-Los recorridos automatizados han usado 320 × 568, 390 × 844, 768 × 1024, 1363 × 900 y 740 × 360, con ambos temas y los idiomas admitidos según el caso. Se revisaron capturas de los controles de calidad en escritorio y 320 px. Ver [validación](docs/validation.md).
+Los recorridos automatizados han usado 320 × 568, 390 × 844, 768 × 1024, 1363 × 900 y 740 × 360, con ambos temas y los idiomas admitidos según el caso. Ver [validación](docs/validation.md).
 
 Para conectar un teléfono o tableta al equipo principal se activa el acceso en red local desde Ajustes y se vincula mediante código o QR ([LOCAL-NETWORK.md](LOCAL-NETWORK.md)); el teléfono controla el servicio del host y no ejecuta inferencia local ni instala una PWA. Faltan pruebas físicas en iOS/Android reales, teclado virtual, áreas seguras, orientación y lectores de pantalla.

@@ -22,7 +22,7 @@ La preparación enseña la fuente/licencia exacta y requiere aceptación. No se 
 
 Modelos permite buscar por nombre o intención mediante texto/categorías, explorar compatibles sin escribir y ordenar por popularidad o propuesta recomendada. Las recomendaciones priorizan lo comprobado con los ajustes elegidos y archivos ya preparados; no son un ranking de calidad.
 
-La bienvenida ofrece un modelo principal y una alternativa ordenados por nivel de compatibilidad. Todavía no comparte toda la prioridad por evidencia y disponibilidad del catálogo. Buscar por intención no equivale a un recomendador completo de modelo y ajustes por tarea; la recuperación guiada por memoria sigue pendiente. [Comparación del hito 4](milestone-4.md).
+La bienvenida ofrece un modelo principal y una alternativa ordenados por nivel de compatibilidad; todavía falta compartir con ella toda la prioridad por evidencia y disponibilidad del catálogo (`localPriority`). Buscar por intención no equivale a un recomendador completo de modelo y ajustes por tarea. [Comparación del hito 4](milestone-4.md).
 
 La consulta externa usa Hugging Face. La exploración general por popularidad está centrada en SD 1.5; también se reconoce el SDXL oficial fijado. Explorar todo puede mostrar familias con su soporte pendiente, sin habilitarlas como ejecutables.
 

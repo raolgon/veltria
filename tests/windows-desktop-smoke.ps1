@@ -33,16 +33,44 @@ try {
     $resources = (Invoke-WebRequest -UseBasicParsing -Uri "$origin/api/v1/resources" -WebSession $localSession).Content | ConvertFrom-Json
     if ($resources.platform -ne 'win32' -or $resources.ram.total -le 0) { throw 'El paquete no expone recursos Windows reales' }
   }
+  Add-Type -TypeDefinition @'
+using System;
+using System.Text;
+using System.Runtime.InteropServices;
+public static class DesktopSmokeWin32 {
+  public delegate bool EnumProc(IntPtr hWnd, IntPtr lParam);
+  [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc cb, IntPtr lParam);
+  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetWindowText(IntPtr hWnd, StringBuilder sb, int max);
+  [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+  public static IntPtr FindMainWindow(uint targetPid) {
+    IntPtr found = IntPtr.Zero;
+    EnumWindows((h, l) => {
+      uint pid; GetWindowThreadProcessId(h, out pid);
+      if (pid == targetPid && IsWindowVisible(h)) {
+        var title = new StringBuilder(256);
+        GetWindowText(h, title, 256);
+        var text = title.ToString();
+        if (text == "Kobocraft" || text == "Veltria") { found = h; return false; }
+      }
+      return true;
+    }, IntPtr.Zero);
+    return found;
+  }
+}
+'@
+  $hwnd = [IntPtr]::Zero
   for ($i=0; $i -lt 100; $i++) {
-    $p.Refresh()
-    if ($p.MainWindowHandle -ne 0 -and ($p.MainWindowTitle -eq 'Kobocraft' -or $p.MainWindowTitle -eq 'Veltria')) { break }
+    $hwnd = [DesktopSmokeWin32]::FindMainWindow([uint32]$p.Id)
+    if ($hwnd -ne [IntPtr]::Zero) { break }
     Start-Sleep -Milliseconds 100
   }
-  if ($p.MainWindowHandle -eq 0) { throw 'Electron no mostro ventana nativa' }
+  if ($hwnd -eq [IntPtr]::Zero) { throw 'Electron no mostro ventana nativa' }
   $patch = if ($Executable) { '{"theme":"dark","locale":"en"}' } else { '{"theme":"dark"}' }
   $saved = (Invoke-WebRequest -UseBasicParsing -Uri "$origin/api/v1/settings" -Method PATCH -ContentType 'application/json' -WebSession $localSession -Headers @{Origin=$origin; 'x-veltria-csrf'=$csrf} -Body $patch).Content | ConvertFrom-Json
   if ($Executable -and $saved.locale -ne 'en') { throw 'No se guardo el idioma en Windows' }
-  if (-not $p.CloseMainWindow()) { throw 'No se pudo solicitar cierre de ventana' }
+  if (-not [DesktopSmokeWin32]::PostMessage($hwnd, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero)) { throw 'No se pudo solicitar cierre de ventana' }
   if (-not $p.WaitForExit(15000)) { throw 'Electron no cerro en Windows' }
   if (Test-Path $path) { throw 'Electron dejo el bloqueo del auxiliar propio' }
   if (-not (Test-Path (Join-Path $data 'settings.sqlite'))) { throw 'No se conservaron los ajustes' }

@@ -1,4 +1,4 @@
-import { mkdir, cp } from 'node:fs/promises'
+import { mkdir, cp, rm } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { build } from 'esbuild'
 if (Bun.version !== '1.4.4') throw new Error('Este proyecto requiere Bun 1.4.4.')
@@ -15,6 +15,7 @@ const browserDirectory = `build/browser/${(await Bun.file('package.json').json()
 await mkdir(`${browserDirectory}/resources/service`, { recursive: true })
 await run(['build', '--compile', `--target=${target}`, './scripts/web-launcher.ts', '--outfile', `${browserDirectory}/veltria-web${extension}`])
 await cp(`build/service/veltria-service${extension}`, `${browserDirectory}/resources/service/veltria-service${extension}`)
+await rm(`${browserDirectory}/resources/ui`, { recursive: true, force: true })
 await cp('apps/ui/dist', `${browserDirectory}/resources/ui`, { recursive: true })
 await build({ entryPoints: ['apps/desktop/src/main.ts'], outfile: 'apps/desktop/dist/main.cjs', bundle: true, platform: 'node', target: 'node24', format: 'cjs', external: ['electron'] })
 await build({ entryPoints: ['apps/desktop/src/preload.ts'], outfile: 'apps/desktop/dist/preload.cjs', bundle: true, platform: 'node', target: 'node24', format: 'cjs', external: ['electron'] })

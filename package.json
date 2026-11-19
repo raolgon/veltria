@@ -18,7 +18,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json && vue-tsc --noEmit -p apps/ui/tsconfig.json",
     "start:web": "bun scripts/web.ts",
     "start:desktop": "node scripts/desktop.mjs",
-    "test": "vitest run && bun test ./tests/service.bun.ts ./tests/creation.bun.ts ./tests/video.bun.ts ./tests/setup.bun.ts ./tests/managed.bun.ts && bun scripts/smoke-service.ts",
+    "test": "vitest run && bun test ./tests/service.bun.ts ./tests/creation.bun.ts ./tests/video.bun.ts ./tests/setup.bun.ts ./tests/managed.bun.ts ./tests/lan.bun.ts && bun scripts/smoke-service.ts",
     "test:ui": "playwright test",
     "package:linux": "bun run build && electron-builder --linux AppImage --publish never",
     "package:win": "bun scripts/build.ts --target=bun-windows-x64-baseline && electron-builder --win nsis --x64 --publish never",

@@ -60,7 +60,7 @@ La preparación localiza/reutiliza un ComfyUI existente, planifica componentes, 
 
 Los perfiles/recetas están incluidos o pasan las comprobaciones acotadas de descubrimiento; no se ejecutan workflows de terceros. Cada trabajo guarda perfil/revisión, configuración, dimensiones, pasos, CFG y semilla reales. La calidad por imagen se valida en contrato y dominio, sin modificar la configuración portable.
 
-Imagen y video no se ejecutan a la vez. La cancelación se dirige al trabajo propio, sin interrupción global de motores ajenos. Un envío incierto se reconcilia, no se reenvía automáticamente.
+Imagen y video no se ejecutan a la vez. La cancelación se dirige al trabajo propio, sin interrupción global de motores ajenos. Un envío incierto se reconcilia, no se reenvía automáticamente. Los fallos de ejecución se clasifican (`memory`, `incompatible`, `engine-unavailable`, `execution`) conservando nodo y traza en SQLite para ofrecer recuperación guiada revisable sin reenvíos automáticos.
 
 La instalación administrada vive en `apps/local-service/src/managed.ts`, con manifiestos fijados en `packages/core/src/managed`, contratos compartidos y una sección del asistente Vue. Añade estado, ubicación y autorización persistidos en tablas propias de SQLite, sin cambiar el esquema de trabajos 4. Descarga/verifica el conjunto, instala desde wheels offline y comprueba CUDA antes de preparar el modelo. El Python propio desactiva la importación opcional de Triton para evitar exigir compilador del sistema. Si existe otro motor, elegir una instalación separada exige confirmación explícita en el plan y su autorización. [Recorrido y validación](docs/managed-setup.md).
 

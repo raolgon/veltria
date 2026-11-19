@@ -16,11 +16,11 @@ Set-Location 'C:\Users\rafao\Documents\ChatGPT\Veltria'
 .\build\browser\0.10.0\veltria-web.exe
 ```
 
-Linux/WSL con pantalla:
+Linux/WSL con pantalla (tras compilar con `bun run build` / `bun run package:dir`):
 
 ```bash
 cd '/mnt/c/Users/rafao/Documents/ChatGPT/Veltria'
-./release/0.10.0/linux-unpacked/kobocraft
+./release/0.10.0/linux-unpacked/veltria
 ./build/browser/0.10.0/veltria-web
 ```
 
@@ -28,9 +28,9 @@ El enlace del navegador vence en 60 segundos y es de un solo uso. Ejecutar de nu
 
 ## Qué se puede hacer
 
-- Crear imágenes con SD 1.5, DreamShaper 8 y SDXL Base; elegir formato, tamaño, pasos y CFG, o limpiar el lienzo.
+- Crear imágenes con SD 1.5, DreamShaper 8 y SDXL Base; elegir formato, tamaño, pasos y CFG, limpiar el lienzo y recuperarse de fallos clasificados (memoria, incompatibilidad, motor o ejecución) con ajustes reducidos revisables.
 - Buscar modelos y LoRA admitidos, explorar compatibles por popularidad, revisar recomendaciones y preparar sus componentes.
-- Descargar con progreso, pausa, reanudación cuando el origen la admite y verificación SHA-256; gestionar archivos completos y parciales.
+- Descargar con progreso, pausa, reanudación cuando el origen la admite y verificación SHA-256; gestionar archivos completos y parciales con avisos de espacio y permisos.
 - Compartir el estudio en red local (LAN) con código o QR local, aprobación en el equipo principal y revocación por dispositivo.
 - Importar/exportar configuraciones JSON, guardar PNG y consultar la biblioteca persistente.
 - Consultar recursos reales del equipo y usar español/inglés y temas claro/oscuro/sistema con logotipos adaptativos.
@@ -69,6 +69,5 @@ bun run start:desktop
 | [Preparación](docs/setup.md), [instalación propia](docs/managed-setup.md) | Recorrido de configuración, entorno administrado y recuperación. |
 | [Modelos](docs/models.md), [calidad](docs/image-quality.md) | Catálogo, LoRA, archivos y ajustes por imagen. |
 | [Video](docs/video.md), [recursos](docs/resources.md), [idiomas](docs/languages.md) | Funciones específicas y su alcance. |
-| [Laboratorio Linux](docs/linux-lab.md), [prueba Windows](docs/windows-lab.md) | Entornos aislados de prueba en `D:\Veltria\lab`. |
 
 El historial de entregas se consulta en Git; estas guías describen el estado actual. Modelos, resultados y datos personales permanecen fuera del repositorio.
