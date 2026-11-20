@@ -56,8 +56,20 @@ export class VideoController {
     ]
     if (!binding) blockers.push('Vincula primero tu instalación existente de ComfyUI en Mi equipo.')
     if (components.length !== 4 || components.some(file => file.status !== 'present')) blockers.push('Faltan componentes válidos del perfil de video. No se descargará nada automáticamente.')
-    if (!['win32', 'linux'].includes(hardware.platform) || !gpu || (gpu.vramTotal ?? 0) < 5.5 * 1024 ** 3) blockers.push('Este perfil de video necesita Windows o Linux y una GPU NVIDIA de al menos 6 GB nominales; otros equipos no se han validado.')
-    if ((hardware.ram.total ?? 0) < 28 * 1024 ** 3) warnings.unshift('Tu equipo tiene menos de 32 GB de RAM nominales. Estos pesos grandes pueden agotar la memoria; este perfil no se recomienda como una opción fiable para tu equipo.')
+    if (!['win32', 'linux'].includes(hardware.platform)) {
+      blockers.push('Este perfil de video necesita Windows o Linux y una GPU NVIDIA de al menos 6 GB nominales; otros equipos no se han validado.')
+    } else if (!gpu || gpu.vramTotal === null) {
+      blockers.push('No se pudo confirmar una GPU NVIDIA con al menos 6 GB de VRAM dedicada. Actualiza la detección del equipo.')
+    } else if (gpu.vramTotal < 5.5 * 1024 ** 3) {
+      blockers.push('Este perfil de video necesita Windows o Linux y una GPU NVIDIA de al menos 6 GB nominales; otros equipos no se han validado.')
+    }
+    if (hardware.ram.total === null) {
+      warnings.unshift('No se pudo confirmar la memoria RAM total del equipo. Estos pesos grandes requieren mucha memoria; revisa tus recursos antes de probar este perfil experimental.')
+    } else if (hardware.ram.total < 28 * 1024 ** 3) {
+      warnings.unshift('Tu equipo tiene menos de 32 GB de RAM nominales. Estos pesos grandes pueden agotar la memoria; este perfil no se recomienda como una opción fiable para tu equipo.')
+    } else if (hardware.ram.available === null) {
+      warnings.unshift('No se pudo leer la memoria RAM disponible. Cierra otras aplicaciones antes de probar este perfil experimental.')
+    }
     if (available === null || available < 512 * 1024 ** 2) blockers.push('Se necesitan al menos 512 MiB libres en el disco de datos para guardar el video y sus temporales.')
     const engineVersionFile = binding ? await readFile(join(binding.directory, 'comfyui_version.py'), 'utf8').catch(() => '') : ''
     const revision = digest({ recipe: videoRevision, binding, engineVersionFile, components, hardware: { platform: hardware.platform, cpu: hardware.cpu.name, ram: hardware.ram.total, gpu: gpu && [gpu.name, gpu.vramTotal, gpu.driver] } })

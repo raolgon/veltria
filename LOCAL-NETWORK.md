@@ -26,8 +26,8 @@ Permite usar Kobocraft desde un teléfono, tableta u otra computadora conectada 
 - Interfaz: `apps/ui/src/LanSettings.vue` (panel del propietario en Ajustes) y `apps/ui/src/LanPairScreen.vue` (pantalla de vinculación en el cliente remoto).
 - Pruebas automatizadas: `tests/lan.bun.ts` verifica validación de IPv4 privadas, generación QR, bloqueo sin sesión, flujo de solicitud/aprobación/reclamación, permisos permitidos y denegados para el rol `lan`, y revocación inmediata de dispositivos y SSE.
 
-## Límites y validación pendiente
+## Límites y validación
 
 - El transporte LAN usa HTTP directo en la red privada local; no cifra el tráfico ni debe exponerse a Internet o redes públicas.
 - Si el servicio se ejecuta dentro de WSL2, detecta la interfaz virtual y muestra una advertencia indicando iniciar Kobocraft directamente en Windows para conectar desde otros dispositivos físicos sin reenvío de puertos.
-- Falta documentar la validación manual desde un segundo dispositivo físico real (teléfono o tableta) en la misma Wi-Fi/LAN y con corte de Internet.
+- Validado físicamente el 20 de noviembre de 2026 en Windows nativo (`Kobocraft.exe` sobre Wi-Fi privada) desde un segundo dispositivo físico real: emparejamiento y aprobación en la PC principal, creación y consulta de imágenes con rol `lan`, funcionamiento sin salida a Internet en la misma Wi-Fi local y revocación inmediata desde el equipo principal.

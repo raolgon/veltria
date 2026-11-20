@@ -16,6 +16,7 @@ export class VideoFixture {
   startDelay = 0
   componentsValid = true
   modified = 1
+  hardware = fixtureHardware
   server: ReturnType<typeof Bun.serve>
   engine: ImageEngine
   options: Pick<VideoOptions, 'engine' | 'components' | 'hardware' | 'probe' | 'disk'>
@@ -38,7 +39,7 @@ export class VideoFixture {
     this.engine = { origin: null, version: 'video-fixture-no-AI', async start() { if (fixture.startDelay) await Bun.sleep(fixture.startDelay); (this as any).origin = `http://127.0.0.1:${fixture.server.port}` }, async stop() { (this as any).origin = null } }
     this.options = {
       engine: this.engine,
-      hardware: async () => fixtureHardware,
+      hardware: async () => this.hardware,
       disk: async () => 10 * 1024 ** 3,
       components: async () => videoFiles.map(file => ({ role: file.role, filename: file.filename, path: `/fixture/${file.folder}/${file.filename}`, bytes: 1000, modified: this.modified, status: this.componentsValid ? 'present' : 'missing' } as VideoComponent)),
       probe: async () => ({ width: 448, height: 256, frames: 22, fps: 24, duration: 22 / 24, codec: 'h264', audio: false })

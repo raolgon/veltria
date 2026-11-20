@@ -6,14 +6,12 @@ import { api } from './api'
 import { t, bytes } from './i18n'
 import ManagedSetup from './ManagedSetup.vue'
 import StorageNotice from './StorageNotice.vue'
+import { rankWelcomeModels, defaultChoice, availabilityLabel, modelEvidenceLabel, primaryGpu, setupPlanAvailabilityLabel, setupPlanEvidenceLabel } from './catalog-guidance'
 import type { ManagedState } from '@veltria/contracts'
 const props = defineProps<{ preparation?: Preparation; inline?: boolean; state: SetupState | null; managed?: ManagedState | null; hardware?: Hardware | null; catalog?: Catalog | null; connected: boolean; busy: boolean; error: string }>()
 const emit = defineEmits<{ close: []; refresh: []; scan: [directory?: string]; prepare: [revision: string]; select: [id: string] }>()
 const showOthers = ref(false), ownEnvironment = ref(false)
-const choices = computed(() => (props.catalog?.models || []).filter(item => !item.profile.adaptation).sort((a, b) => {
-  const rank = (level: string) => ['recommended', 'limited', 'unknown', 'unsupported'].indexOf(level)
-  return rank(a.recommendation.level) - rank(b.recommendation.level)
-}))
+const choices = computed(() => rankWelcomeModels(props.catalog ?? null))
 const visibleChoices = computed(() => showOthers.value ? choices.value : choices.value.slice(0, 2))
 function chooseModel(modelId: string) {
   const entry = props.catalog?.configurations.find(item => item.configuration.modelId === modelId)
@@ -68,7 +66,7 @@ onBeforeUnmount(() => { disposed = true; reviewVersion++; if (!props.inline) dia
       <section v-if="hardware" class="setup-image">
         <h3>{{ t('Tu equipo para crear') }}</h3>
         <p>{{ hardware.gpus.map(gpu => gpu.name).join(', ') || hardware.cpu.name }}</p>
-        <p>{{ bytes(hardware.ram.total) }} RAM · {{ bytes(hardware.gpus[0]?.vramTotal ?? null) }} {{ t('de memoria gráfica') }}</p>
+        <p>{{ bytes(hardware.ram.total) }} RAM · {{ bytes(primaryGpu(hardware)?.vramTotal ?? null) }} {{ t('de memoria gráfica') }}</p>
       </section>
       <section v-if="catalog && !inline" class="setup-image">
         <h3>{{ t('Elige con qué empezar') }}</h3>
@@ -76,7 +74,7 @@ onBeforeUnmount(() => { disposed = true; reviewVersion++; if (!props.inline) dia
         <fieldset class="setup-installations"><legend>{{ t('Modelos de imágenes') }}</legend>
           <label v-for="item in visibleChoices" :key="item.profile.id">
             <input type="radio" name="setup-model" :checked="catalog.selectedModelId === item.profile.id" :disabled="busy || catalog.busy" @change="chooseModel(item.profile.id)">
-            <span>{{ item.profile.model }}<small>{{ t(item.profile.description) }}</small><small>{{ t(item.recommendation.reason) }}</small><small>{{ bytes(item.remainingBytes ?? item.profile.bytes) }} · {{ item.recommendation.level === 'recommended' ? t('Recomendado') : item.recommendation.level === 'limited' ? t('Con limitaciones') : t('Compatibilidad sin confirmar') }}</small></span>
+            <span>{{ item.profile.model }}<small>{{ t(item.profile.description) }}</small><small>{{ t(item.recommendation.reason) }}</small><small>{{ bytes(item.remainingBytes ?? item.profile.bytes) }} · {{ t(availabilityLabel(item.status)) }} · {{ t(modelEvidenceLabel(item, defaultChoice(item.profile.id, catalog), catalog)) }}</small></span>
           </label>
         </fieldset>
         <button class="text-button" :aria-expanded="showOthers" @click="showOthers = !showOthers">{{ showOthers ? t('Ver menos opciones') : t('Ver otros modelos') }}</button>
@@ -89,7 +87,7 @@ onBeforeUnmount(() => { disposed = true; reviewVersion++; if (!props.inline) dia
       <fieldset v-if="usable.length > 1" class="setup-installations"><legend>{{ t('¿Qué instalación quieres reutilizar?') }}</legend><label v-for="item in usable" :key="item.id"><input v-model="selected" type="radio" name="setup-installation" :value="item.id" :disabled="busy"><span>{{ name(item) }}<small>{{ item.directory }}</small></span></label></fieldset>
       <template v-if="plan">
         <section class="setup-proposal"><Monitor :size="25" aria-hidden="true"/><div><h3>{{ t('Usaremos lo que ya tienes') }}</h3><p>{{ name(plan.installation) }}</p><p>{{ t('Se conservarán sus modelos y ajustes. Kobocraft abrirá un proceso propio cuando autorices la preparación.') }}</p></div></section>
-        <section class="setup-image"><h3>{{ t('Una opción para empezar') }}</h3><p>{{ plan.profile.model }} · {{ plan.configuration.origin === 'included' ? t(plan.configuration.name) : plan.configuration.name }}</p><p>{{ t(plan.profile.description) }}</p><p class="helper">{{ t(plan.recommendation.reason) }}</p></section>
+        <section class="setup-image"><h3>{{ t('Una opción para empezar') }}</h3><p>{{ plan.profile.model }} · {{ plan.configuration.origin === 'included' ? t(plan.configuration.name) : plan.configuration.name }}</p><p class="helper">{{ t(setupPlanEvidenceLabel(plan, catalog ?? null)) }} · {{ t(setupPlanAvailabilityLabel(plan, catalog ?? null)) }}</p><p>{{ t(plan.profile.description) }}</p><p class="helper">{{ t(plan.recommendation.reason) }}</p></section>
         <dl class="download-plan"><div><dt>{{ t('Descarga pendiente') }}</dt><dd>{{ bytes(plan.preparation.remainingBytes) }}</dd></div><div><dt>{{ t('Espacio necesario, con margen') }}</dt><dd>{{ bytes(plan.preparation.requiredBytes) }}</dd></div><div><dt>{{ t('Disponible en el disco') }}</dt><dd>{{ bytes(plan.preparation.availableBytes) }}</dd></div><div><dt>{{ t('Ya disponible para comprobar') }}</dt><dd>{{ bytes(plan.preparation.reuseBytes) }}</dd></div></dl>
         <p>{{ t('Al terminar, podrás crear con la descripción que ya escribiste. Preparar no genera una imagen.') }}</p>
         <details class="setup-technical"><summary>{{ t('Ver instalación, ubicación y cambios') }}</summary><p>{{ plan.configuration.steps }} {{ t('pasos') }} · CFG {{ plan.configuration.cfg }}</p><dl><div><dt>ComfyUI</dt><dd>{{ plan.installation.directory }}</dd></div><div><dt>Python</dt><dd>{{ plan.installation.python }}</dd></div><div><dt>{{ t('Archivo de destino') }}</dt><dd>{{ plan.preparation.destination }}</dd></div></dl><ul><li v-for="change in plan.preparation.changes" :key="change">{{ t(change) }}</li></ul><p>{{ t('Los archivos se han localizado; el arranque y la compatibilidad del entorno se comprobarán durante la preparación.') }}</p><a :href="plan.preparation.source" target="_blank" rel="noreferrer">{{ t('Ver fuente del modelo') }}</a></details>

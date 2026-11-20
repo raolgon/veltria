@@ -16,17 +16,27 @@ export const starterProfile: ImageProfile = {
 }
 export const dimensions = { square: [512, 512], landscape: [512, 384], portrait: [384, 512] } as const
 export function recommendImage(hardware: Hardware, profile?: Pick<ImageProfile,'family'>) {
-  if (!['win32', 'linux'].includes(hardware.platform)) return { level: 'unsupported' as const, reason: 'Este perfil sólo está habilitado en Windows y Linux. macOS sigue pendiente de validación.' }
+  if (!['win32', 'linux'].includes(hardware.platform)) {
+    return {
+      level: 'unsupported' as const,
+      reason: profile?.family === 'sdxl'
+        ? 'SDXL sólo está habilitado en Windows y Linux; macOS está pendiente.'
+        : 'Este perfil sólo está habilitado en Windows y Linux. macOS sigue pendiente de validación.'
+    }
+  }
   const nvidia = hardware.gpus.find(gpu => /nvidia/i.test(gpu.name))
   if (!nvidia || nvidia.vramTotal === null) return { level: 'unknown' as const, reason: 'No se pudo confirmar una GPU NVIDIA con memoria dedicada suficiente. Actualiza la detección del equipo.' }
-  if(profile?.family==='sdxl') {
-    if(!['win32','linux'].includes(hardware.platform)) return {level:'unsupported' as const,reason:'SDXL sólo está habilitado en Windows y Linux; macOS está pendiente.'}
-    if(nvidia.vramTotal < 5.5 * 1024 ** 3 || (hardware.ram.total??0)<14*1024**3) return {level:'unsupported' as const,reason:'Este perfil SDXL requiere al menos 6 GB de VRAM y 16 GB de RAM nominales; no está verificado para equipos menores.'}
-    return {level:'limited' as const,reason:'SDXL usa un perfil de 768 píxeles y descarga parcial de memoria a RAM. Cierra otras aplicaciones antes de preparar; la ejecución se comprobará con una imagen real.'}
+  if (hardware.ram.total === null) return { level: 'unknown' as const, reason: 'No se pudo confirmar la memoria RAM del equipo. Actualiza la detección del equipo.' }
+  if (profile?.family === 'sdxl') {
+    if (nvidia.vramTotal < 5.5 * 1024 ** 3 || hardware.ram.total < 14 * 1024 ** 3) return { level: 'unsupported' as const, reason: 'Este perfil SDXL requiere al menos 6 GB de VRAM y 16 GB de RAM nominales; no está verificado para equipos menores.' }
+    if (hardware.ram.available === null) return { level: 'limited' as const, reason: 'SDXL usa un perfil de 768 píxeles y descarga parcial a RAM, pero no se pudo leer la memoria RAM libre. Cierra otras aplicaciones antes de preparar; la ejecución se comprobará con una imagen real.' }
+    if (hardware.ram.available < 3 * 1024 ** 3 || (nvidia.vramAvailable !== null && nvidia.vramAvailable < 2 * 1024 ** 3)) return { level: 'limited' as const, reason: 'SDXL usa un perfil de 768 píxeles y descarga parcial a RAM, pero queda poca memoria libre. Cierra aplicaciones que usen GPU o mucha RAM antes de preparar; la ejecución se comprobará con una imagen real.' }
+    return { level: 'limited' as const, reason: 'SDXL usa un perfil de 768 píxeles y descarga parcial de memoria a RAM. Cierra otras aplicaciones antes de preparar; la ejecución se comprobará con una imagen real.' }
   }
   // The OS reports usable memory, slightly below the nominal 4/8 GB device capacities.
-  if (nvidia.vramTotal < 3.5 * 1024 ** 3 || (hardware.ram.total ?? 0) < 7 * 1024 ** 3) return { level: 'unsupported' as const, reason: 'Este primer perfil necesita una GPU NVIDIA de al menos 4 GB y 8 GB de RAM nominales. No se ha validado una alternativa para este equipo.' }
-  if ((hardware.ram.available ?? 0) < 1.5 * 1024 ** 3 || nvidia.vramAvailable !== null && nvidia.vramAvailable < 2 * 1024 ** 3) return { level: 'limited' as const, reason: 'El equipo cumple los mínimos, pero queda poca memoria libre. Cierra aplicaciones que usen GPU o mucha RAM antes de crear.' }
+  if (nvidia.vramTotal < 3.5 * 1024 ** 3 || hardware.ram.total < 7 * 1024 ** 3) return { level: 'unsupported' as const, reason: 'Este primer perfil necesita una GPU NVIDIA de al menos 4 GB y 8 GB de RAM nominales. No se ha validado una alternativa para este equipo.' }
+  if (hardware.ram.available === null) return { level: 'limited' as const, reason: 'El equipo cumple los mínimos nominales, pero no se pudo leer la memoria RAM libre. Cierra aplicaciones exigentes antes de crear.' }
+  if (hardware.ram.available < 1.5 * 1024 ** 3 || nvidia.vramAvailable !== null && nvidia.vramAvailable < 2 * 1024 ** 3) return { level: 'limited' as const, reason: 'El equipo cumple los mínimos, pero queda poca memoria libre. Cierra aplicaciones que usen GPU o mucha RAM antes de crear.' }
   return { level: 'recommended' as const, reason: `Tu ${nvidia.name} cumple los mínimos de este perfil a 512 píxeles. La recomendación inicial se basa en recursos; la primera imagen comprobará la ejecución.` }
 }
 export const recipeNodes = ['CheckpointLoaderSimple', 'CLIPTextEncode', 'EmptyLatentImage', 'KSampler', 'VAEDecode', 'SaveImage'] as const

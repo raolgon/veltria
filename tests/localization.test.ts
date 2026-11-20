@@ -26,6 +26,16 @@ describe('español e inglés', () => {
       expect(target.trim(), source).not.toBe('')
       expect(placeholders(target), source).toEqual(placeholders(source))
     }
+    for (const key of [
+      'Sin descargar', 'Descarga parcial', 'Descargado · falta comprobar', 'Preparado para crear', 'Preparación en curso',
+      'Comprobado en este equipo', 'Comprobado con los ajustes elegidos', 'Compatible estimado · falta probar esta configuración',
+      'Cumple los mínimos · memoria libre limitada', 'Cumple los mínimos · memoria libre sin confirmar',
+      'Con ajustes de memoria · ejecución por comprobar', 'Con ajustes de memoria · memoria libre sin confirmar', 'Con ajustes de memoria · poca memoria libre',
+      'Compatibilidad sin confirmar', 'No admitido en este equipo', 'Compatibilidad por revisar',
+      'Memoria libre sin lectura', 'Servicio local desconectado', 'Pausar'
+    ]) {
+      expect(translate(key, 'en'), key).not.toBe(key)
+    }
   })
   it('localiza medidas y distingue desconocido de cero', () => {
     expect(bytes(null, 'en')).toBe('Unknown')

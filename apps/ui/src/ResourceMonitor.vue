@@ -20,10 +20,10 @@ function memoryPercent(memory: Resources['ram'] | undefined) {
 }
 const rows = computed(() => [
   { key: 'cpu', label: 'CPU', componentName: props.cpuName?.trim() || null, icon: Cpu, value: live.value ? percent(sample.value?.cpu.percent) : '—', usage: live.value ? sample.value?.cpu.percent ?? null : null, detail: [props.cpuName?.trim(), sample.value?.wsl ? t('Uso del procesador del entorno WSL') : t('Uso del procesador de todo el equipo')].filter(Boolean).join(' · ') },
-  { key: 'ram', label: 'RAM', componentName: null, icon: MemoryStick, value: memoryLabel(sample.value?.ram), usage: memoryPercent(sample.value?.ram), detail: live.value ? t("{0} disponibles", { 0: bytes(sample.value!.ram.available) }) : t('Memoria del equipo') },
+  { key: 'ram', label: 'RAM', componentName: null, icon: MemoryStick, value: memoryLabel(sample.value?.ram), usage: memoryPercent(sample.value?.ram), detail: live.value ? (sample.value!.ram.available !== null ? t("{0} disponibles", { 0: bytes(sample.value!.ram.available) }) : t('Memoria libre sin lectura')) : t('Memoria del equipo') },
   ...(sample.value?.gpus.length ? sample.value.gpus : [null]).flatMap((gpu, index) => [
     { key: `gpu-${index}`, componentName: gpu?.name || null, label: (sample.value?.gpus.length ?? 0) > 1 ? `GPU ${index + 1}` : 'GPU', icon: CircuitBoard, value: live.value ? percent(gpu?.percent) : '—', usage: live.value ? gpu?.percent ?? null : null, detail: gpu?.name || t('Uso gráfico no disponible en este equipo') },
-    ...(gpu ? [{ key: `vram-${index}`, componentName: null, label: 'VRAM', icon: MemoryStick, value: memoryLabel(gpu.memory), usage: memoryPercent(gpu.memory), detail: live.value ? t("{0} disponibles · {1}", { 0: bytes(gpu.memory.available), 1: gpu.name }) : t('Memoria gráfica') }] : [])
+    ...(gpu ? [{ key: `vram-${index}`, componentName: null, label: 'VRAM', icon: MemoryStick, value: memoryLabel(gpu.memory), usage: memoryPercent(gpu.memory), detail: live.value ? (gpu.memory.available !== null ? t("{0} disponibles · {1}", { 0: bytes(gpu.memory.available), 1: gpu.name }) : `${t('Memoria libre sin lectura')} · ${gpu.name}`) : t('Memoria gráfica') }] : [])
   ])
 ])
 async function update() {

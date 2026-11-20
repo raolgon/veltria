@@ -4,6 +4,7 @@ import { Sparkles, Monitor, Check, Download, Pause, ArrowRight, RefreshCw, X, In
 import type { CreationState, PreparationPlan, ImageJob, ImageQuality } from '@veltria/contracts'
 import { bytes, t, date } from './i18n'
 import { validImageQuality, profileDimensions, reduceImageQuality } from '@veltria/core'
+import { isVerifiedQuality, creationEvidenceLabel, creationAvailabilityLabel } from './catalog-guidance'
 import ImageQualityControls from './ImageQualityControls.vue'
 import IdeaArt from './IdeaArt.vue'
 const props = defineProps<{ state: CreationState | null; plan: PreparationPlan | null; job: ImageJob | null; prompt: string; quality: ImageQuality | null; format: 'square' | 'landscape' | 'portrait'; connected: boolean; busy: boolean; error: string }>()
@@ -13,13 +14,7 @@ const preparing = computed(() => !!props.state && ['downloading', 'verifying', '
 const activeJob = computed(() => !!props.job && ['queued', 'submitting', 'running', 'saving'].includes(props.job.status))
 const image = computed(() => props.job?.imageId ? `/api/v1/artifacts/${props.job.imageId}` : null)
 const validQuality = computed(() => !props.quality || validImageQuality(props.quality, props.state?.profile))
-const verifiedQuality = computed(() => {
-  if (!props.state?.recommendation.verified) return false
-  const evidence = props.state.recommendation.evidenceDetails
-  const [width, height] = profileDimensions(props.format, props.state.profile)
-  const quality = props.quality ?? { width, height, steps: props.state.configuration.steps, cfg: props.state.configuration.cfg }
-  return !!evidence && evidence.width === quality.width && evidence.height === quality.height && quality.steps === props.state.configuration.steps && quality.cfg === props.state.configuration.cfg
-})
+const verifiedQuality = computed(() => isVerifiedQuality(props.state, props.format, props.quality))
 const reducedQuality = computed(() => {
   if (!props.job || props.job.status !== 'failed' || props.job.failure?.kind !== 'memory' || !props.state) return null
   return reduceImageQuality(props.job, props.state.profile, props.state.configuration.steps, props.state.configuration.cfg)
@@ -89,8 +84,8 @@ watch(() => props.plan, async plan => {
     <aside class="creation-settings" :aria-label="t('Perfil para tu equipo')">
       <div class="section-heading"><h2>{{ t('Tu punto de partida') }}</h2></div>
       <template v-if="state">
-        <div class="profile-card"><span class="profile-emblem"><Monitor :size="24"/></span><div><span class="recommendation">{{ verifiedQuality ? t('Comprobado en este equipo') : state.recommendation.level === 'recommended' ? t('Recomendado para empezar') : t('Compatibilidad por revisar') }}</span><strong>{{ t(state.profile.title) }}</strong></div></div>
-        <p class="helper configuration-summary">{{ state.configuration.origin === 'included' ? t(state.configuration.name) : state.configuration.name }} · {{ state.configuration.steps }} {{ t('pasos') }} · CFG {{ state.configuration.cfg }}<button class="text-button" :disabled="busy || preparing || activeJob" @click="emit('models')">{{ t('Cambiar modelo o configuración') }}</button></p>
+        <div class="profile-card"><span class="profile-emblem"><Monitor :size="24"/></span><div><span class="recommendation">{{ t(creationEvidenceLabel(state, verifiedQuality)) }}</span><strong>{{ t(state.profile.title) }}</strong></div></div>
+        <p class="helper configuration-summary">{{ state.configuration.origin === 'included' ? t(state.configuration.name) : state.configuration.name }} · {{ state.configuration.steps }} {{ t('pasos') }} · CFG {{ state.configuration.cfg }} · {{ t(creationAvailabilityLabel(state)) }}<button class="text-button" :disabled="busy || preparing || activeJob" @click="emit('models')">{{ t('Cambiar modelo o configuración') }}</button></p>
         <p class="helper">{{ t(state.recommendation.reason) }}</p><p v-if="state.recommendation.evidence" class="helper evidence-note">{{ state.recommendation.evidenceDetails ? t('Primera creación comprobada en este equipo: {0} × {1}, {2}.', { 0: state.recommendation.evidenceDetails.width, 1: state.recommendation.evidenceDetails.height, 2: date(state.recommendation.evidenceDetails.at) }) : t(state.recommendation.evidence) }}</p>
         <button v-if="state.bound" class="text-button" :disabled="busy || preparing || activeJob" @click="emit('setup')">{{ t('Revisar instalación') }}</button>
         <div class="option-section"><h2>{{ t('Formato') }}</h2><div class="format-options"><button v-for="option in (['square', 'landscape', 'portrait'] as const)" :key="option" :class="{ selected: format === option }" :aria-pressed="format === option" :disabled="busy || preparing || activeJob" @click="emit('update:format', option)"><span :class="['aspect', { square: option === 'square', tall: option === 'portrait' }]"></span>{{ { square: t('Cuadrado'), landscape: t('Horizontal'), portrait: t('Vertical') }[option] }}</button></div></div>

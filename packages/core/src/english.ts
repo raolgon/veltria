@@ -1020,6 +1020,25 @@ export const english: Readonly<Record<string, string>> = {
   "Red local · QR": "Local network · QR",
   "Conectar móvil": "Connect phone",
   "Quitar del lienzo": "Clear from canvas",
-  "La imagen sigue guardada en tu biblioteca.": "The image stays saved in your library."
+  "La imagen sigue guardada en tu biblioteca.": "The image stays saved in your library.",
+  "No admitido en este equipo": "Unsupported on this computer",
+  "No se pudo confirmar la memoria RAM del equipo. Actualiza la detección del equipo.": "System RAM could not be confirmed. Refresh hardware detection.",
+  "El equipo cumple los mínimos nominales, pero no se pudo leer la memoria RAM libre. Cierra aplicaciones exigentes antes de crear.": "Your computer meets the nominal minimums, but free RAM could not be read. Close demanding apps before creating.",
+  "Cumple los mínimos · memoria libre sin confirmar": "Meets minimum requirements · free memory unconfirmed",
+  "SDXL usa un perfil de 768 píxeles y descarga parcial a RAM, pero no se pudo leer la memoria RAM libre. Cierra otras aplicaciones antes de preparar; la ejecución se comprobará con una imagen real.": "SDXL uses 768-pixel settings and partial offloading to RAM, but free RAM could not be read. Close other applications before preparing; a real image will test execution.",
+  "SDXL usa un perfil de 768 píxeles y descarga parcial a RAM, pero queda poca memoria libre. Cierra aplicaciones que usen GPU o mucha RAM antes de preparar; la ejecución se comprobará con una imagen real.": "SDXL uses 768-pixel settings and partial offloading to RAM, but little memory is free. Close apps that use the GPU or a lot of RAM before preparing; a real image will test execution.",
+  "Con ajustes de memoria · memoria libre sin confirmar": "Memory adjustments · free memory unconfirmed",
+  "Con ajustes de memoria · poca memoria libre": "Memory adjustments · low free memory",
+  "No se pudo confirmar una GPU NVIDIA con al menos 6 GB de VRAM dedicada. Actualiza la detección del equipo.": "An NVIDIA GPU with at least 6 GB of dedicated VRAM could not be confirmed. Refresh hardware detection.",
+  "No se pudo confirmar la memoria RAM total del equipo. Estos pesos grandes requieren mucha memoria; revisa tus recursos antes de probar este perfil experimental.": "Total system RAM could not be confirmed. These large weights require a lot of memory; check your resources before trying this experimental profile.",
+  "No se pudo leer la memoria RAM disponible. Cierra otras aplicaciones antes de probar este perfil experimental.": "Available RAM could not be read. Close other applications before trying this experimental profile.",
+  "Memoria libre sin lectura": "Free memory reading unavailable",
+  "Preparación en curso": "Preparation in progress",
+  "Servicio local desconectado": "Local service disconnected",
+  "Pausar": "Pause",
+  "No se pudo retirar el archivo. Actualiza la lista.": "Could not remove the file. Refresh the list.",
+  "No se pudo consultar el proveedor.": "Could not query the provider.",
+  "No se pudo comprobar el archivo.": "Could not check the file.",
+  "CUDA no está disponible; comprueba el controlador NVIDIA": "CUDA is not available; check the NVIDIA driver"
 }
 

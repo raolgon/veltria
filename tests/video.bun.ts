@@ -95,3 +95,31 @@ test('video: migra esquema 2 sin perder preferencias y conserva copia de SQLite'
   const server = await createServer({ dataDir: directory, uiDir: ui, instanceId: crypto.randomUUID(), controlToken: 'a'.repeat(64) })
   try { expect(server.repository.get().locale).toBe('en'); expect((server.repository.db.query('PRAGMA user_version').get() as any).user_version).toBe(4); expect(await readdir(join(directory, 'backups'))).toHaveLength(1) } finally { await server.close(); await rm(directory, { recursive: true, force: true }) }
 })
+test('video: distingue RAM y VRAM sin lectura frente a hardware insuficiente (ES y EN)', async () => {
+  const { translate } = await import('@veltria/core')
+  const GiB = 1024 ** 3
+  const ctx = await setup()
+  try {
+    // 1. Unreadable total RAM must not falsely assert "< 32 GB"
+    ctx.video.hardware = { ...fixtureHardware, ram: { ...fixtureHardware.ram, total: null, available: null } }
+    const nullRamPlan = await ctx.json('/video/plan')
+    expect(nullRamPlan.warnings.some((w: string) => w.includes('No se pudo confirmar la memoria RAM total'))).toBe(true)
+    expect(nullRamPlan.warnings.some((w: string) => w.includes('menos de 32 GB'))).toBe(false)
+
+    // 2. Sufficient total RAM (>= 32 GB) with unreadable free RAM warns about free RAM uncertainty
+    ctx.video.hardware = { ...fixtureHardware, ram: { ...fixtureHardware.ram, total: 32 * GiB, available: null } }
+    const nullAvailPlan = await ctx.json('/video/plan')
+    expect(nullAvailPlan.warnings.some((w: string) => w.includes('No se pudo leer la memoria RAM disponible'))).toBe(true)
+    expect(nullAvailPlan.warnings.some((w: string) => w.includes('menos de 32 GB'))).toBe(false)
+
+    // 3. NVIDIA GPU with unreadable VRAM produces uncertainty blocker instead of claiming < 6 GB
+    ctx.video.hardware = { ...fixtureHardware, gpus: [{ ...fixtureHardware.gpus[0], vramTotal: null, vramAvailable: null }] }
+    const nullVramPlan = await ctx.json('/video/plan')
+    expect(nullVramPlan.canPrepare).toBe(false)
+    expect(nullVramPlan.blockers.some((b: string) => b.includes('No se pudo confirmar una GPU NVIDIA con al menos 6 GB'))).toBe(true)
+
+    for (const msg of [...nullRamPlan.warnings, ...nullAvailPlan.warnings, ...nullVramPlan.blockers]) {
+      expect(translate(msg, 'en')).not.toBe(msg)
+    }
+  } finally { await ctx.close() }
+})

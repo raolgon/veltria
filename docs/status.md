@@ -1,6 +1,6 @@
 # Estado e hitos
 
-Revisado el 19 de noviembre de 2026 contra el código de `development`. Versión de desarrollo **0.10.0**, protocolo **9**, SQLite de trabajos **4**. [Abrir y desarrollar](../README.md).
+Revisado el 20 de noviembre de 2026 contra el código de `development`. Versión de desarrollo **0.10.0**, protocolo **9**, SQLite de trabajos **4**. [Abrir y desarrollar](../README.md).
 
 ## Funciona
 
@@ -17,15 +17,15 @@ Red local (LAN): listener dedicado opcional por interfaz IPv4 privada, código d
 | 1. UI, servicio y equipo real | Implementado y comprobado en Windows/WSL | Validación ampliada en Linux nativo y macOS. |
 | 2. Primera imagen y biblioteca | Cumplido en Windows | Más equipos y pruebas GPU en Linux nativo. |
 | 3. Preparación administrada | Implementado y validado en Windows aislado y WSL; avisos de espacio, cuota, sólo lectura y permisos con recuperación | Linux nativo; usabilidad con una persona nueva; ampliar equipos y sistemas de archivos. |
-| 3B. Uso por LAN | Implementado y cubierto por pruebas de integración (`tests/lan.bun.ts`) | Validación desde un segundo dispositivo físico en la misma red local y con corte de Internet. |
-| 4. Recomendaciones verificables y recuperación guiada | Avanzado: reglas por equipo, filtros por intención, evidencia, bienvenida con alternativas, clasificación de errores y recuperación guiada por memoria | Unificar prioridad de propuesta entre bienvenida y catálogo, ampliar matriz de equipos/ajustes y validar usabilidad. [Comparación y aceptación](milestone-4.md). |
+| 3B. Uso por LAN | Cumplido en Windows (red privada local) | Ampliar comprobación a Linux nativo/macOS si se desea; el acceso sigue siendo HTTP en red privada. |
+| 4. Recomendaciones verificables y recuperación guiada | Código implementado en el alcance actual: reglas por equipo e incertidumbre de RAM, prioridad y etiquetas unificadas entre bienvenida, asistente, catálogo y Crear, clasificación de errores y recuperación guiada por memoria | Validación de usabilidad con una persona nueva y ampliación a otros equipos/plataformas si se desea. [Comparación y aceptación](milestone-4.md). |
 | 5. Video, audio y distribución ampliada | Video experimental; paquetes Windows/Linux disponibles | Generación H3 real viable, audio, instalador firmado y pruebas de otras plataformas. |
 
 ## Siguiente prioridad
 
-El siguiente incremento funcional propuesto del hito 4 es compartir la prioridad de recomendaciones (`localPriority`) entre el catálogo y la bienvenida, verificar coherencia de etiquetas y ampliar la matriz de pruebas de recursos y ajustes. [Requisitos y faltantes](milestone-4.md), [tarea siguiente](../FIRST-TASK.md).
+El código del hito 4 (prioridad compartida entre bienvenida/asistente/catálogo, etiquetas coherentes de estimación/disponibilidad/comprobación y matriz ampliada de pruebas con fixtures) quedó implementado. [Requisitos y detalle](milestone-4.md), [tarea siguiente](../FIRST-TASK.md).
 
-La validación física pendiente permanece abierta para Linux nativo, prueba con una persona nueva (usabilidad) y uso LAN desde un segundo dispositivo físico real. El recorrido administrado completo ya pasó en Windows nativo con entorno/datos separados y en WSL, incluida generación CUDA, recuperación tras cierres forzados y comprobación ACL real en Windows. [Implementación y evidencia](managed-setup.md), [validación](validation.md).
+La validación física del hito 3B (LAN desde segundo dispositivo físico en Wi-Fi privada, con emparejamiento, creación/consulta bajo rol `lan`, corte de Internet y revocación) quedó comprobada en Windows el 20 de noviembre de 2026. Permanecen abiertas la validación en Linux nativo y la prueba de usabilidad con una persona nueva. El recorrido administrado completo ya pasó en Windows nativo con entorno/datos separados y en WSL, incluida generación CUDA, recuperación tras cierres forzados y comprobación ACL real en Windows. [Implementación y evidencia](managed-setup.md), [validación](validation.md).
 
 ## Límites actuales
 

@@ -5,16 +5,26 @@ import type { Catalog, Hardware, ManagedState, SetupState, Preparation } from '@
 import SetupWizard from './SetupWizard.vue'
 import PreparationProgress from './PreparationProgress.vue'
 import StorageNotice from './StorageNotice.vue'
+import { selectWelcomeModels, defaultChoice, availabilityLabel, modelEvidenceLabel, primaryGpu } from './catalog-guidance'
 import { t, bytes, locale } from './i18n'
 const props = defineProps<{ catalog: Catalog | null; hardware: Hardware | null; state: SetupState | null; managed: ManagedState | null; preparation?: Preparation; connected: boolean; busy: boolean; loading: boolean; error: string; dark: boolean }>()
 const emit = defineEmits<{ select: [id: string]; scan: [directory?: string]; prepare: [revision: string]; refresh: []; reconnect: []; theme: []; language: []; pause: [] }>()
-const reviewing = ref(false), others = ref(false)
-const choices = computed(() => (props.catalog?.models || []).filter(item => !item.profile.adaptation).sort((a,b) => ['recommended','limited','unknown','unsupported'].indexOf(a.recommendation.level) - ['recommended','limited','unknown','unsupported'].indexOf(b.recommendation.level)))
-const primary = computed(() => choices.value.find(item => item.profile.id === props.catalog?.selectedModelId) || choices.value[0])
-const alternative = computed(() => choices.value.find(item => item.profile.id !== primary.value?.profile.id))
+const reviewing = ref(false), others = ref(false), userPicked = ref(false)
+const welcome = computed(() => selectWelcomeModels(props.catalog, userPicked.value))
+const choices = computed(() => welcome.value.choices)
+const primary = computed(() => welcome.value.primary)
+const alternative = computed(() => welcome.value.alternative)
 const profileWorking = computed(() => ['downloading','verifying','starting'].includes(props.preparation?.status || ''))
 const working = computed(() => ['downloading','installing','preparing'].includes(props.managed?.status || '') || profileWorking.value)
-function choose(id: string) { reviewing.value = false; const entry = props.catalog?.configurations.find(item => item.configuration.modelId === id); if (entry) emit('select', entry.id) }
+function choose(id: string) { userPicked.value = true; reviewing.value = false; const entry = props.catalog?.configurations.find(item => item.configuration.modelId === id); if (entry) emit('select', entry.id) }
+function startReview() {
+  if (primary.value && props.catalog && primary.value.profile.id !== props.catalog.selectedModelId) {
+    const entryId = defaultChoice(primary.value.profile.id, props.catalog)
+    if (entryId) emit('select', entryId)
+  }
+  reviewing.value = true
+}
+function fitLabel(item: NonNullable<typeof primary.value>) { return props.catalog ? t(modelEvidenceLabel(item, defaultChoice(item.profile.id, props.catalog), props.catalog)) : '' }
 </script>
 <template>
   <div class="welcome-shell">
@@ -23,14 +33,14 @@ function choose(id: string) { reviewing.value = false; const entry = props.catal
       <div class="welcome-intro"><h1 tabindex="-1">{{ t('Tu PC, lista para imaginar.') }}</h1><p>{{ t('Prepara un modelo para empezar a crear imágenes localmente. Kobocraft se encarga de instalarlo.') }}</p></div>
       <p class="welcome-reason" role="status">{{ t(connected ? 'Servicio local conectado' : 'Servicio local desconectado') }}</p>
       <p v-if="loading" role="status">{{ t('Detectando el hardware del servicio…') }}</p>
-      <div v-if="hardware" class="welcome-hardware"><Monitor :size="19"/><span>{{ hardware.gpus.map(gpu => gpu.name).join(', ') || hardware.cpu.name }}</span><span>{{ bytes(hardware.gpus[0]?.vramTotal ?? null) }} VRAM</span><span>{{ bytes(hardware.ram.total) }} RAM</span></div>
+      <div v-if="hardware" class="welcome-hardware"><Monitor :size="19"/><span>{{ hardware.gpus.map(gpu => gpu.name).join(', ') || hardware.cpu.name }}</span><span>{{ bytes(primaryGpu(hardware)?.vramTotal ?? null) }} VRAM</span><span>{{ bytes(hardware.ram.total) }} RAM</span></div>
       <div v-if="error" class="warning" role="alert"><p>{{ t(error) }}</p><button class="secondary-button" :disabled="loading" @click="emit('reconnect')"><RefreshCw :size="16"/>{{ t('Volver a conectar') }}</button></div>
       <template v-if="primary">
-        <section class="welcome-recommendation" :aria-labelledby="'welcome-model'"><div><p class="welcome-fit">{{ t(primary.recommendation.level === 'recommended' ? 'Recomendado para tu equipo' : primary.recommendation.level === 'limited' ? 'Con limitaciones' : 'Compatibilidad sin confirmar') }}</p><h2 id="welcome-model">{{ primary.profile.model }}</h2><p>{{ t(primary.profile.description) }}</p><p class="welcome-reason">{{ t(primary.recommendation.reason) }}</p><button v-if="!reviewing" class="primary-button" :disabled="!connected || busy || loading" @click="reviewing = true">{{ t('Instalar y preparar mi PC') }}</button></div><aside><ShieldCheck :size="25"/><strong>{{ t('Local') }}</strong><p>{{ t('Sin cuentas. Imágenes en tu equipo.') }}</p></aside></section>
+        <section class="welcome-recommendation" :aria-labelledby="'welcome-model'"><div><p class="welcome-fit">{{ fitLabel(primary) }}</p><h2 id="welcome-model">{{ primary.profile.model }}</h2><p>{{ t(primary.profile.description) }}</p><p class="welcome-reason">{{ t(availabilityLabel(primary.status)) }}<span v-if="primary.status === 'partial'"> · {{ bytes(primary.received) }}</span></p><p class="welcome-reason">{{ t(primary.recommendation.reason) }}</p><button v-if="!reviewing" class="primary-button" :disabled="!connected || busy || loading" @click="startReview">{{ t('Instalar y preparar mi PC') }}</button></div><aside><ShieldCheck :size="25"/><strong>{{ t('Local') }}</strong><p>{{ t('Sin cuentas. Imágenes en tu equipo.') }}</p></aside></section>
         <template v-if="!reviewing && !working">
-          <section v-if="alternative" class="welcome-alternative"><h3>{{ alternative.profile.model }}</h3><p>{{ t(alternative.profile.description) }}</p><p class="welcome-reason">{{ t(alternative.recommendation.reason) }}</p><button class="text-button" :disabled="busy || !connected" @click="choose(alternative.profile.id)">{{ t('Elegir este modelo') }}</button></section>
+          <section v-if="alternative" class="welcome-alternative"><p class="welcome-reason">{{ fitLabel(alternative) }} · {{ t(availabilityLabel(alternative.status)) }}</p><h3>{{ alternative.profile.model }}</h3><p>{{ t(alternative.profile.description) }}</p><p class="welcome-reason">{{ t(alternative.recommendation.reason) }}</p><button class="text-button" :disabled="busy || !connected" @click="choose(alternative.profile.id)">{{ t('Elegir este modelo') }}</button></section>
           <button class="text-button" :aria-expanded="others" @click="others = !others">{{ t(others ? 'Ver menos opciones' : 'Ver todos los modelos') }}</button>
-          <section v-if="others" class="welcome-others"><article v-for="item in choices" :key="item.profile.id"><h3>{{ item.profile.model }}</h3><p>{{ t(item.recommendation.reason) }}</p><button class="secondary-button" :disabled="busy || !connected" @click="choose(item.profile.id)">{{ t('Elegir este modelo') }}</button></article></section>
+          <section v-if="others" class="welcome-others"><p class="welcome-reason">{{ t('Priorizamos lo comprobado con los ajustes elegidos y lo que ya tienes preparado. No es una comparación de calidad entre modelos.') }}</p><article v-for="item in choices" :key="item.profile.id"><h3>{{ item.profile.model }}</h3><p class="welcome-reason">{{ fitLabel(item) }} · {{ t(availabilityLabel(item.status)) }}</p><p>{{ t(item.recommendation.reason) }}</p><button class="secondary-button" :disabled="busy || !connected" @click="choose(item.profile.id)">{{ t('Elegir este modelo') }}</button></article></section>
         </template>
         <button v-if="reviewing && !working" class="text-button" @click="reviewing = false">{{ t('Volver a elegir modelo') }}</button>
         <section v-if="profileWorking && managed?.status !== 'preparing'" class="preparation-feedback"><p role="status">{{ t(preparation!.message) }}</p><PreparationProgress :label="preparation!.status === 'downloading' ? 'Descarga del modelo' : preparation!.status === 'verifying' ? 'Comprobando los archivos' : 'Comprobando el modelo y el motor'" :received="preparation!.status === 'downloading' ? preparation!.received : undefined" :total="preparation!.status === 'downloading' ? preparation!.total : undefined" :connected="connected"/><button class="secondary-button" :disabled="busy || !connected" @click="emit('pause')">{{ t('Pausar') }}</button></section>
